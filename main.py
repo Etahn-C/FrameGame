@@ -49,22 +49,31 @@ def frame_times(frame_timing, length, fps=1/60):
     frames = []
 
     if not frame_timing:
-        for min in range(1, int((length+r_fps-1)//r_fps)):
-            frames.append(('t', min*r_fps, min*r_fps+1))
+        for minute in range(1, int((length+r_fps-2)//r_fps)):
+            frames.append(f"t,{minute*r_fps},{minute*r_fps+1}")
 
     else:
         prev_frame = 0
-        for min in range(1, int((length+r_fps-1)//r_fps)):
-            frame = randrange(max(0,int(prev_frame-3/4*r_fps)), r_fps)
-            frames.append(('t', int(min*r_fps-r_fps/2+frame), int(min*r_fps-r_fps/2+frame+1)))
+        for minute in range(1, int((length+r_fps-2)//r_fps)):
+            frame = randrange(max(0,int(prev_frame-3/4*r_fps)), min(r_fps, length-r_fps*minute))
+            frames.append(f"t,{int(minute*r_fps-r_fps/2+frame)},{int(minute*r_fps-r_fps/2+frame+1)}")
 
     return frames
 
-def extract_frames(file=0, output_loc=0, frames=0):
+def extract_frames(file, output_loc=0):
+    length = int(float(ffmpeg.probe(file)['format']['duration']))
+
+    frames = f"select='between(t,{-1},{0})+"
+    for times in frame_times(True, length, 1/60):
+        frames += f"between({times})+"
+    frames = frames[0:-1]
+    frames += f"',fps=1/60"
+
+    print(frames)
     (
         ffmpeg
-        .input(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
-        .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf="select='between(t,60,61)+between(t,120,121)+between(t,180,181)+between(t,240,241)+between(t,300,301)+between(t,360,361)+between(t,420,421)+between(t,480,481)+between(t,540,541)+between(t,600,601)+between(t,660,661)+between(t,720,721)+between(t,780,781)+between(t,840,841)+between(t,900,901)+between(t,960,961)+between(t,1020,1021)+between(t,1080,1081)+between(t,1140,1141)+between(t,1200,1201)+between(t,1260,1261)+between(t,1320,1321)+between(t,1380,1381)',fps=1/61")
+        .input(file)
+        .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf=frames)
         .run()
     )
     
@@ -79,7 +88,8 @@ def main():
 
     #print(frame_times(False, 300, 1/60))
     print(frame_times(True, 300, 1/60))
-    extract_frames()
+ 
+    extract_frames(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
     input("hit enter to exit")
 
 
