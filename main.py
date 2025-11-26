@@ -4,6 +4,13 @@ import ffmpeg
 
 
 def get_response(question, options, outputs):
+    """
+    Gets a text response based on input
+    
+    :param question: question string
+    :param options: list with all valid options
+    :param outputs: list with responses coordinated with options
+    """
     while True:
         user_input = input(question)
         if user_input.lower() in options:
@@ -13,6 +20,13 @@ def get_response(question, options, outputs):
 
 
 def get_settings(vid_dir="", frame_dir="", frame_timing=None):
+    """
+    Gets responses from user and returns them
+    
+    :param vid_dir: None
+    :param frame_dir: None
+    :param frame_timing: None
+    """
     while True:
 
         if vid_dir == "":
@@ -45,58 +59,58 @@ def get_settings(vid_dir="", frame_dir="", frame_timing=None):
 
 
 def frame_times(frame_timing, length, fps=1/60):
+    """
+    Generates a list of frame times
+    
+    :param rand_frame_timing: Bool
+    :param length: length in seconds
+    :param fps: how many frames per second
+    """
     r_fps = int(1/fps)
     frames = []
 
     if not frame_timing:
         for minute in range(1, int((length+r_fps-2)//r_fps)):
-            frames.append(f"t,{minute*r_fps},{minute*r_fps+1}")
+            frames.append(f"t,{minute*r_fps}")
 
     else:
         prev_frame = 0
         for minute in range(1, int((length+r_fps-2)//r_fps)):
-            frame = randrange(max(0,int(prev_frame-3/4*r_fps)), min(r_fps, length-r_fps*minute))
-            frames.append(f"t,{int(minute*r_fps-r_fps/2+frame)},{int(minute*r_fps-r_fps/2+frame+1)}")
-
-    return frames
-
-#TODO Make this work with frames instead of seconds!
-def frame_times(frame_timing, length, fps=1/60, framerate=24):
-    r_fps = int(1/fps)
-    frames = []
-
-    if not frame_timing:
-        for minute in range(1, int((length+r_fps-2)//r_fps)):
-            time = minute*r_fps * framerate
-            frames.append(f"n,{time},{time+1}")
-
-    else:
-        prev_frame = 0
-        for minute in range(1, int((length+r_fps-2)//r_fps)):
-            frame = randrange(max(0,int(prev_frame-3/4*r_fps)), min(r_fps, length-r_fps*minute))
-            time = int(minute*r_fps-r_fps/2+frame)*framerate
-            frames.append(f"n,{time},{time+1}")
+            frame = randrange(
+                max(0,int(prev_frame-3/4*r_fps)), 
+                min(r_fps, length-r_fps*minute))
+            prev_frame = frame
+            time = int(minute*r_fps-r_fps/2+frame)
+            frames.append(f"t,{time}")
 
     return frames
 
 def extract_frames(file, output_loc=0):
+    """
+    Uses ffmpeg to extract frames
+    
+    :param file: input file path
+    :param output_loc: output fiel path
+    """
+    
     length = int(float(ffmpeg.probe(file)['format']['duration']))
-    print(ffmpeg.probe(file)['streams'][0]['r_frame_rate'])
-    frames = f"select='"
-    for times in frame_times(True, length, 1, int(eval(ffmpeg.probe(file)['streams'][0]['r_frame_rate']))):
-        frames += f"between({times})+"
+    frames = f"fps=1, select='"
+    for times in frame_times(True, length, 1/60):
+        frames += f"eq({times})+"
     frames = frames[0:-1]
-    frames += f"',fps=1/60"
+    frames += f"'"
 
-    print(frames)
+    print('\n',frames,'\n')
+    print(f"Processing: {file}")
     (
         ffmpeg
         .input(file)
         .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf=frames, fps_mode='vfr')
+        .global_args("-hide_banner")
+        .global_args("-loglevel", "error")
+        .global_args("-stats")
         .run()
     )
-    
-    
 
 
 def main():
@@ -105,9 +119,6 @@ def main():
     #vid_dir, frame_dir, frame_timing = get_settings()
     #print (f"Here are your current settings:\n\tVideo Directory ------- {vid_dir}\n\tFrame/Data Directory -- {frame_dir}\n\tRandom Frame Times ---- {frame_timing}")
 
-    #print(frame_times(False, 300, 1/60))
-    print(frame_times(True, 300, 1/60))
- 
     extract_frames(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
     input("hit enter to exit")
 
