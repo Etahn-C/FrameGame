@@ -60,11 +60,30 @@ def frame_times(frame_timing, length, fps=1/60):
 
     return frames
 
+#TODO Make this work with frames instead of seconds!
+def frame_times(frame_timing, length, fps=1/60, framerate=24):
+    r_fps = int(1/fps)
+    frames = []
+
+    if not frame_timing:
+        for minute in range(1, int((length+r_fps-2)//r_fps)):
+            time = minute*r_fps * framerate
+            frames.append(f"n,{time},{time+1}")
+
+    else:
+        prev_frame = 0
+        for minute in range(1, int((length+r_fps-2)//r_fps)):
+            frame = randrange(max(0,int(prev_frame-3/4*r_fps)), min(r_fps, length-r_fps*minute))
+            time = int(minute*r_fps-r_fps/2+frame)*framerate
+            frames.append(f"n,{time},{time+1}")
+
+    return frames
+
 def extract_frames(file, output_loc=0):
     length = int(float(ffmpeg.probe(file)['format']['duration']))
-
-    frames = f"select='between(t,{-1},{0})+"
-    for times in frame_times(True, length, 1/60):
+    print(ffmpeg.probe(file)['streams'][0]['r_frame_rate'])
+    frames = f"select='"
+    for times in frame_times(True, length, 1, int(eval(ffmpeg.probe(file)['streams'][0]['r_frame_rate']))):
         frames += f"between({times})+"
     frames = frames[0:-1]
     frames += f"',fps=1/60"
@@ -73,7 +92,7 @@ def extract_frames(file, output_loc=0):
     (
         ffmpeg
         .input(file)
-        .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf=frames)
+        .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf=frames, fps_mode='vfr')
         .run()
     )
     
