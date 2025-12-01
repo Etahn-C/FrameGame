@@ -1,9 +1,11 @@
 from tkinter import filedialog
 from random import randrange
 import ffmpeg
+import os
+import shutil
 
 
-def get_response(question, options, outputs):
+def get_response(question: str, options: list[str], outputs: list[str]):
     """
     Gets a text response based on input
     
@@ -19,7 +21,7 @@ def get_response(question, options, outputs):
             print("Not a valid input, try again")
 
 
-def get_settings(vid_dir="", frame_dir="", frame_timing=None):
+def get_settings(vid_dir: str="", frame_dir: str="", frame_timing: bool=None):
     """
     Gets responses from user and returns them
     
@@ -58,7 +60,7 @@ def get_settings(vid_dir="", frame_dir="", frame_timing=None):
             return vid_dir, frame_dir, frame_timing
 
 
-def frame_times(frame_timing, length, fps=1/60):
+def frame_times(frame_timing:bool, length:int, fps:float=1/60):
     """
     Generates a list of frame times
     
@@ -85,7 +87,7 @@ def frame_times(frame_timing, length, fps=1/60):
 
     return frames
 
-def extract_frames(file, output_loc=0):
+def extract_frames(file:str, output_loc:str):
     """
     Uses ffmpeg to extract frames
     
@@ -100,12 +102,13 @@ def extract_frames(file, output_loc=0):
     frames = frames[0:-1]
     frames += f"'"
 
-    print('\n',frames,'\n')
+    #print('\n',frames,'\n')
     print(f"Processing: {file}")
+    file_name = os.path.splitext(os.path.basename(file))[0]
     (
         ffmpeg
         .input(file)
-        .output(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\out%d.jpg", vf=frames, fps_mode='vfr')
+        .output(os.path.join(output_loc, file_name + r" - %03d.jpg"), vf=frames, fps_mode='vfr')
         .global_args("-hide_banner")
         .global_args("-loglevel", "error")
         .global_args("-stats")
@@ -113,13 +116,35 @@ def extract_frames(file, output_loc=0):
     )
 
 
+def ignore_files(dir, files):
+    return [f for f in files if os.path.isfile(os.path.join(dir, f))]
+
+
+def folder_structure(file_path:str, save_path:str):
+    shutil.copytree(file_path, save_path, dirs_exist_ok=True, ignore=ignore_files)
+
+
+def run_files(file_path:str, save_path:str):
+    for item in os.listdir(file_path):
+        if os.path.isdir(os.path.join(file_path, item)):
+            run_files(os.path.join(file_path, item), os.path.join(save_path, item))
+        else:
+            try:
+                extract_frames(os.path.join(file_path, item), save_path)
+            except Exception as e:
+                print("error whoopsies on", os.path.join(file_path, item))
+                print(e)
+    
+
+
 def main():
     print("--Welcome to FrameExtractor for FrameGame!--")
     input("press enter to continue")
     #vid_dir, frame_dir, frame_timing = get_settings()
     #print (f"Here are your current settings:\n\tVideo Directory ------- {vid_dir}\n\tFrame/Data Directory -- {frame_dir}\n\tRandom Frame Times ---- {frame_timing}")
-
-    extract_frames(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
+    #extract_frames(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
+    
+    run_files(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video",r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data")
     input("hit enter to exit")
 
 
