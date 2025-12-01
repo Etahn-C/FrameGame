@@ -131,9 +131,12 @@ def run_files(file_path:str, save_path:str):
         else:
             try:
                 extract_frames(os.path.join(file_path, item), save_path)
-            except Exception as e:
-                print("error whoopsies on", os.path.join(file_path, item))
-                print(e)
+            except:
+                try:
+                    extract_frames(os.path.join(file_path, item), save_path)
+                except Exception as e:
+                    print("error whoopsies on", os.path.join(file_path, item))
+                    print(e)
     
 
 
