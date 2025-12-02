@@ -2,7 +2,9 @@ from tkinter import filedialog
 from random import randrange
 import ffmpeg
 import os
-import shutil
+from  shutil import copytree
+import json
+import re
 
 
 def get_response(question: str, options: list[str], outputs: list[str]):
@@ -73,7 +75,7 @@ def frame_times(frame_timing:bool, length:int, fps:float=1/60):
 
     if not frame_timing:
         for minute in range(1, int((length+r_fps-2)//r_fps)):
-            frames.append(f"t,{minute*r_fps}")
+            frames.append(minute*r_fps)
 
     else:
         prev_frame = 0
@@ -83,22 +85,20 @@ def frame_times(frame_timing:bool, length:int, fps:float=1/60):
                 min(r_fps, length-r_fps*minute))
             prev_frame = frame
             time = int(minute*r_fps-r_fps/2+frame)
-            frames.append(f"t,{time}")
+            frames.append(time)
 
     return frames
 
-def extract_frames(file:str, output_loc:str):
+def extract_frames(file:str, output_loc:str, times:list[int]):
     """
     Uses ffmpeg to extract frames
     
     :param file: input file path
     :param output_loc: output fiel path
     """
-    
-    length = int(float(ffmpeg.probe(file)['format']['duration']))
     frames = f"fps=1, select='"
-    for times in frame_times(True, length, 1/60):
-        frames += f"eq({times})+"
+    for time in times:
+        frames += f"eq(t,{time})+"
     frames = frames[0:-1]
     frames += f"'"
 
@@ -121,23 +121,29 @@ def ignore_files(dir, files):
 
 
 def folder_structure(file_path:str, save_path:str):
-    shutil.copytree(file_path, save_path, dirs_exist_ok=True, ignore=ignore_files)
+    copytree(file_path, save_path, dirs_exist_ok=True, ignore=ignore_files)
 
 
-def run_files(file_path:str, save_path:str):
+def run_files(file_path:str, save_path:str, frame_timing:bool=False, fps:float=1/60, data_file_config=None):
     for item in os.listdir(file_path):
         if os.path.isdir(os.path.join(file_path, item)):
-            run_files(os.path.join(file_path, item), os.path.join(save_path, item))
+            run_files(os.path.join(file_path, item), os.path.join(save_path, item), frame_timing, fps)
         else:
+            length = int(float(ffmpeg.probe(os.path.join(file_path, item))['format']['duration']))
+            times = frame_times(frame_timing, length, fps)
             try:
-                extract_frames(os.path.join(file_path, item), save_path)
+                extract_frames(os.path.join(file_path, item), save_path, times)
             except:
+                print(f"{os.path.join(file_path, item)} failed once, trying again")
                 try:
-                    extract_frames(os.path.join(file_path, item), save_path)
+                    extract_frames(os.path.join(file_path, item), save_path, times)
                 except Exception as e:
-                    print("error whoopsies on", os.path.join(file_path, item))
-                    print(e)
-    
+                    print("Failed again, moving to next file.")
+                    print(f"The Error was: {e}")
+
+
+def write_data():
+    pass    
 
 
 def main():
@@ -146,8 +152,37 @@ def main():
     #vid_dir, frame_dir, frame_timing = get_settings()
     #print (f"Here are your current settings:\n\tVideo Directory ------- {vid_dir}\n\tFrame/Data Directory -- {frame_dir}\n\tRandom Frame Times ---- {frame_timing}")
     #extract_frames(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video\My Little Pony Friendship Is Magic S01E01.mkv")
+    input_dir = r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video"
+    output_dir = r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data"
+    frame_timing = True
     
-    run_files(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\video",r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data")
+    #TODO
+    """
+    if os.path.exists(os.path.join(output_dir, "data.json")):
+        with open(os.path.join(output_dir, "data.json"), "r") as file:
+            data = json.load(file)
+            print(data["Settings"])
+        file.close()
+    else:
+        with open(os.path.join(output_dir, "data.json"), "w") as file:
+            data = {"Settings": [{"RandomTiming": True},{"FrameRate": "1/60"},{"Series Name": "My Little Pony Friendship Is Magic"},{"MovieDB": 12345}],"Frames": []}
+            json.dump(data, file)
+        file.close()
+    """
+    with open(os.path.join(output_dir, "data.json"), "r+") as file:
+        data = json.load(file)
+        #print("S01" in data["Frames"][0])
+        #data["Frames"].append({"S01": [{"E01": 15},{"E02":14}] })
+        print(data["Settings"]["Title"])
+        print(data["Frames"]["S01"])
+        data["Frames"]["S01"].update({"E03": {"F001": 10,"F002": 11}})
+        json.dump(data, file)
+    file.close()
+    
+    #TODO
+
+
+    #run_files(input_dir, output_dir, frame_timing, 1/60)
     input("hit enter to exit")
 
 
