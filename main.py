@@ -25,14 +25,15 @@ def get_response(question: str, options: list[str], outputs: list[str]):
             print("Not a valid input, try again")
 
 
-def get_settings(vid_dir: str="", frame_dir: str="", frame_timing: bool=None):
+def get_settings():
     """
     Gets responses from user and returns them
-    
-    :param vid_dir: None
-    :param frame_dir: None
-    :param frame_timing: None
     """
+    
+    vid_dir=""
+    frame_dir=""
+    frame_timing=None
+    
     while True:
 
         if vid_dir == "":
@@ -66,11 +67,14 @@ def get_settings(vid_dir: str="", frame_dir: str="", frame_timing: bool=None):
 
 def frame_times(frame_timing:bool, length:int, fps:float=1/60):
     """
-    Generates a list of frame times
+    Takes in some variables and return a list of numbers.
     
-    :param rand_frame_timing: Bool
-    :param length: length in seconds
-    :param fps: how many frames per second
+    :param frame_timing: True for random frame timings
+    :type frame_timing: bool
+    :param length: length of item in seconds
+    :type length: int
+    :param fps: how many cuts per second default 1/60
+    :type fps: float
     """
     r_fps = int(1/fps)
     frames = []
@@ -94,10 +98,14 @@ def frame_times(frame_timing:bool, length:int, fps:float=1/60):
 
 def extract_frames(file:str, output_loc:str, times:list[int]):
     """
-    Uses ffmpeg to extract frames
+    Uses FFMPEG to extract frames based on a list of times.
     
-    :param file: input file path
-    :param output_loc: output fiel path
+    :param file: Input file path
+    :type file: str
+    :param output_loc: Output file path
+    :type output_loc: str
+    :param times: List of times to extract
+    :type times: list[int]
     """
     frames = f"fps=1, select='"
     for time in times:
@@ -122,11 +130,22 @@ def ignore_files(dir, files):
     return [f for f in files if os.path.isfile(os.path.join(dir, f))]
 
 
-def folder_structure(file_path:str, save_path:str):
-    copytree(file_path, save_path, dirs_exist_ok=True, ignore=ignore_files)
-
-
 def run_files(file_path:str, save_path:str, frame_timing:bool=False, fps:float=1/60, data_file_path:str=None):
+    """
+    Goes through all files in directory and subdirectories
+    and runs the extract frames and write data function.
+    
+    :param file_path: Input file path
+    :type file_path: str
+    :param save_path: output file path
+    :type save_path: str
+    :param frame_timing: True for random timing
+    :type frame_timing: bool
+    :param fps: frames per second 1/60 is def
+    :type fps: float
+    :param data_file_path: file path to data file
+    :type data_file_path: str
+    """
     for item in os.listdir(file_path):
         file = os.path.join(file_path, item)
         if os.path.isdir(file):
@@ -142,6 +161,14 @@ def run_files(file_path:str, save_path:str, frame_timing:bool=False, fps:float=1
 
 
 def write_data(data_file_path:str, item, times):
+    """
+    Will write data to the data file
+    
+    :param data_file_path: file path for data file
+    :type data_file_path: str
+    :param item: Name of the item being added
+    :param times: List of times
+    """
     season = re.search(r"([S]\d\d)[E]\d\d", item).group(1)
     episode = re.search(r"[S]\d\d([E]\d\d)", item).group(1)
     with open(data_file_path, "r", encoding='utf-8') as file:
@@ -187,7 +214,7 @@ def main():
         print("Episode Data Saved")
         file.close()
         
-    folder_structure(input_dir, output_dir)
+    copytree(input_dir, output_dir, dirs_exist_ok=True, ignore=ignore_files)
     
     if get_response("\nDo you to run the files (yes/no): ", ["yes","no"], [True, False]):
         run_files(input_dir, output_dir, frame_timing, fps, os.path.join(output_dir, "data.json"))
