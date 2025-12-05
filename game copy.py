@@ -11,16 +11,30 @@ class FrameGame(tk.Tk):
         self.bg = "#808080"
         self.y=1/29
         self.x=1/34
-        self.main_screen()
         
+        container = tk.Frame(self)
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
 
-    def settings_screen(self):
-        next_button = tk.Button(self, text="Next / Skip", bg=self.bg, command=self.main_screen)
-        next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
+        container.pack(fill="both", expand=True)
+        self.pages = {}
+        
+        for Page in (main_screen, settings_screen):
+            page = Page(container, self)
+            self.pages[Page] = page
+            page.grid(row=0, column=0, sticky="nsew")
 
-        pass
+        self.show_page(main_screen)
+
+    def show_page(self, page_class):
+        """Bring a page to the front."""
+        page = self.pages[page_class]
+        page.tkraise()
+
 
     def resize_image(self, event=None):
+        print("resize:", hasattr(self, "image_canvas"), hasattr(self, "img"))
+
         canvas_w = self.image_canvas.winfo_width()
         canvas_h = self.image_canvas.winfo_height()
         if canvas_w < 5 or canvas_h < 5:
@@ -39,7 +53,10 @@ class FrameGame(tk.Tk):
 
 class main_screen(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
+        self.bg = controller.bg
+        self.y = controller.y
+        self.x = controller.x
+        super().__init__(parent, bg=self.bg)
         # Title bar:
         title_bar = tk.Label(self, text="Frame Game: My Little Pony Edition", bg=self.bg)
         title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
@@ -58,10 +75,10 @@ class main_screen(tk.Frame):
         search_menu.place(relheight=1, relwidth=1, relx=0, rely=0)
         
         # Game Buttons
-        next_button = tk.Button(self, text="Next / Skip", bg=self.bg, command="") #TODO
+        next_button = tk.Button(self, text="Next / Skip", bg=self.bg)
         report_button = tk.Button(self, text="Report Frame", bg=self.bg)
         restart_button = tk.Button(self, text="Restart", bg=self.bg)
-        settings_button = tk.Button(self, text="Settings", bg=self.bg)
+        settings_button = tk.Button(self, text="Settings", bg=self.bg, command=lambda: controller.show_page(settings_screen))
         next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
         report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
         restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
@@ -72,16 +89,26 @@ class main_screen(tk.Frame):
         self.image_canvas.place(relheight=18*self.y, relwidth=32*self.x, relx=self.x, rely=self.y)
         self.img = Image.open(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\Season 01\My Little Pony Friendship Is Magic S01E01 - F001.jpg")
         
-class settinfs_screen(tk.Frame):
+class settings_screen(tk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent)
-        next_button = tk.Button(self, text="Next / Skip", bg=self.bg, command=self.main_screen)
+        self.bg = controller.bg
+        self.y = controller.y
+        self.x = controller.x
+        super().__init__(parent, bg=self.bg)
+        next_button = tk.Button(self, text="Main Screen", bg=self.bg, command=lambda: controller.show_page(main_screen))
         next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
 
 def main():
     
     window = FrameGame()
-    # Bind canvas resizing
+
+    # get the main page instance
+    main_page = window.pages[main_screen]
+
+    # connect resize binding to the main page's canvas
+    window.image_canvas = main_page.image_canvas
+    window.img = main_page.img
+
     window.image_canvas.bind("<Configure>", window.resize_image)
     window.mainloop()
 
