@@ -33,8 +33,6 @@ class FrameGame(tk.Tk):
 
 
     def resize_image(self, event=None):
-        print("resize:", hasattr(self, "image_canvas"), hasattr(self, "img"))
-
         canvas_w = self.image_canvas.winfo_width()
         canvas_h = self.image_canvas.winfo_height()
         if canvas_w < 5 or canvas_h < 5:
@@ -76,7 +74,7 @@ class main_screen(tk.Frame):
         
         # Game Buttons
         next_button = tk.Button(self, text="Next / Skip", bg=self.bg)
-        report_button = tk.Button(self, text="Report Frame", bg=self.bg)
+        report_button = tk.Button(self, text="Report Frame", bg=self.bg, command=lambda: controller.show_page(settings_screen))
         restart_button = tk.Button(self, text="Restart", bg=self.bg)
         settings_button = tk.Button(self, text="Settings", bg=self.bg, command=lambda: controller.show_page(settings_screen))
         next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
@@ -95,8 +93,45 @@ class settings_screen(tk.Frame):
         self.y = controller.y
         self.x = controller.x
         super().__init__(parent, bg=self.bg)
-        next_button = tk.Button(self, text="Main Screen", bg=self.bg, command=lambda: controller.show_page(main_screen))
-        next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
+        # Title bar:
+        title_bar = tk.Label(self, text="Frame Game: Settings", bg=self.bg)
+        title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
+        
+        # Settings Labels:
+        file_label = tk.Label(self, text="Change File", bg=self.bg, relief="sunken")
+        season_label = tk.Label(self, text="Season Select", bg=self.bg, relief="sunken")
+        synopsis_label = tk.Label(self, text="Synopsis Search", bg=self.bg, relief="sunken")
+        report_label = tk.Label(self, text="Report Threshold", bg=self.bg, relief="sunken")
+        file_label.place(relheight=self.y, relwidth=8*self.x, relx=1*self.x, rely=self.y*2)
+        season_label.place(relheight=self.y, relwidth=8*self.x, relx=1*self.x, rely=self.y*5)
+        synopsis_label.place(relheight=self.y, relwidth=8*self.x, relx=1*self.x, rely=self.y*8)
+        report_label.place(relheight=self.y, relwidth=8*self.x, relx=1*self.x, rely=self.y*11)
+        
+        # Settings options:
+        file_button = tk.Button(self, text=r"C:\some\file\link\frame-data", bg=self.bg, anchor='w')
+        file_button.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*2)
+        
+        season_entry = tk.Entry(self, bg=self.bg, relief='raised') 
+        season_entry.insert(0, "1-9")
+        season_entry_label = tk.Label(self, bg=self.bg, text="Must be in '1, 2, 5' or '1-3' format", anchor='w')
+        season_entry.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*5)
+        season_entry_label.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*6)
+        
+        syn = tk.IntVar(self, value=1)
+        synopsis_radio_yes = tk.Radiobutton(self, text="Yes", bg=self.bg, variable=syn, value=1, indicatoron=False)
+        synopsis_radio_no = tk.Radiobutton(self, text="No", bg=self.bg, variable=syn, value=0, indicatoron=False)
+        synopsis_radio_yes.place(relheight=self.y, relwidth=3*self.x, relx=10*self.x, rely=self.y*8)
+        synopsis_radio_no.place(relheight=self.y, relwidth=3*self.x, relx=13*self.x, rely=self.y*8)
+        
+        report_entry = tk.Entry(self, bg=self.bg, relief='raised')
+        report_entry.insert(0, 1)
+        report_entry.place(relheight=self.y, relwidth=4*self.x, relx=10*self.x, rely=self.y*11)
+        
+        save_button = tk.Button(self, text="Save Settings", bg=self.bg)
+        save_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=14*self.y)
+        
+        return_button = tk.Button(self, text="Return to Main Menu", bg=self.bg, command=lambda: controller.show_page(main_screen))
+        return_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=17*self.y)
 
 def main():
     
