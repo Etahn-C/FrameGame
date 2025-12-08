@@ -12,6 +12,7 @@ class FrameGame(tk.Tk):
         self.geometry("680x580")
         self.config(background="#808080")
         self.bg = "#808080"
+        self.button_color = "#A0A0A0"
         self.y=1/29
         self.x=1/34
         
@@ -55,6 +56,7 @@ class FrameGame(tk.Tk):
 class main_screen(tk.Frame):
     def __init__(self, parent, controller):
         self.bg = controller.bg
+        self.button_color = controller.button_color
         self.y = controller.y
         self.x = controller.x
         super().__init__(parent, bg=self.bg)
@@ -93,10 +95,12 @@ class main_screen(tk.Frame):
 class settings_screen(tk.Frame):
     def __init__(self, parent, controller):
         self.bg = controller.bg
+        self.button_color = controller.button_color
         self.y = controller.y
         self.x = controller.x
         self.data_dir = ""
         super().__init__(parent, bg=self.bg)
+
         # Title bar:
         title_bar = tk.Label(self, text="Frame Game: Settings", bg=self.bg)
         title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
@@ -112,40 +116,45 @@ class settings_screen(tk.Frame):
         report_label.place(relheight=self.y, relwidth=8*self.x, relx=1*self.x, rely=self.y*11)
         
         # Settings options:
-        self.file_button = tk.Button(self, text="No Current Directory", bg=self.bg, anchor='w', command=lambda: self.change_file())
+        self.file_button = tk.Button(self, text="No Current Directory", bg=self.button_color, anchor='w', command=lambda: self.change_file())
         self.file_button_label = tk.Label(self, text="Click ^ To Choose Directory", bg=self.bg, anchor='w')
         self.file_button.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*2)
         self.file_button_label.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*3)
         
-        self.season_entry = tk.Entry(self, bg=self.bg, relief='raised') 
+        self.season_entry = tk.Entry(self, bg=self.button_color, relief='raised') 
         self.season_entry_label = tk.Label(self, bg=self.bg, text="Must be in '1, 2, 5' format", anchor='w')
         self.season_entry.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*5)
         self.season_entry_label.place(relheight=self.y, relwidth=23*self.x, relx=10*self.x, rely=self.y*6)
         
         self.syn = tk.IntVar(self, value=1)
-        self.synopsis_radio_yes = tk.Radiobutton(self, text="Yes", bg=self.bg, variable=self.syn, value=1, indicatoron=False)
-        self.synopsis_radio_no = tk.Radiobutton(self, text="No", bg=self.bg, variable=self.syn, value=0, indicatoron=False)
+        self.synopsis_radio_yes = tk.Radiobutton(self, text="Yes", bg=self.button_color, variable=self.syn, value=1, indicatoron=False)
+        self.synopsis_radio_no = tk.Radiobutton(self, text="No", bg=self.button_color, variable=self.syn, value=0, indicatoron=False)
         self.synopsis_radio_yes.place(relheight=self.y, relwidth=3*self.x, relx=10*self.x, rely=self.y*8)
         self.synopsis_radio_no.place(relheight=self.y, relwidth=3*self.x, relx=13*self.x, rely=self.y*8)
         
-        self.report_entry = tk.Entry(self, bg=self.bg, relief='raised')
+        self.report_entry = tk.Entry(self, bg=self.button_color, relief='raised')
         self.report_entry.insert(0, 1)
         self.report_entry.place(relheight=self.y, relwidth=4*self.x, relx=10*self.x, rely=self.y*11)
         
-        self.save_button = tk.Button(self, text="Save Settings", bg=self.bg)
+        self.save_button = tk.Button(self, text="Save Settings", bg=self.button_color, command=lambda: self.save_settings())
         self.save_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=14*self.y)
         
-        self.return_button = tk.Button(self, text="Return to Main Menu", bg=self.bg, command=lambda: controller.show_page(main_screen))
+        self.return_button = tk.Button(self, text="Return to Main Menu", bg=self.button_color, command=lambda: controller.show_page(main_screen))
         self.return_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=17*self.y)
         
-        self.default_button = tk.Button(self, text="Default Settings", fg="#AA0000", bg=self.bg, command=lambda: self.default_settings(self.data_dir))
+        self.default_button = tk.Button(self, text="Default Settings", fg="#AA0000", bg=self.button_color, command=lambda: self.default_settings(self.data_dir))
         self.default_button.place(relheight=self.y, relwidth=10*self.x, relx=12*self.x, rely=27*self.y)
 
-    
+        self.update_disabled_widgets()
+
+
+
     def change_file(self):
         self.data_dir = fd.askdirectory(title="Choose Game Data Directory", mustexist=True)
         if not os.path.exists(os.path.join(self.data_dir, "data.json")):
-            print("not a valid dir")
+            self.data_dir = ""
+            self.update_disabled_widgets()
+            self.file_button["text"] = self.data_dir
             return
         self.file_button["text"] = self.data_dir
         self.update_disabled_widgets()
@@ -205,18 +214,54 @@ class settings_screen(tk.Frame):
 
             with open(game_data_file_path,"w", encoding='utf-8') as file:
                 game_data = {
-                    "Settings":{"Title":title, "Seasons":seasons,"Synopsis": 1,"Report": 1,},
-                    "Leaderboard":{"user1":1}
+                    "Settings":{"Title":title, "Seasons":seasons,"Synopsis": 1,"Report": 1,}
                 }
                 json.dump(game_data, file, ensure_ascii=False, indent=4)
         except:
             pass
 
     def save_settings(self):
-        pass
+        new_seasons = self.season_entry.get().split(',')
+        remove_list = []
+        for i in range(len(new_seasons)):
+            try:
+                new_seasons[i] = int(new_seasons[i])
+            except:
+                remove_list.append(i)
+        for i in remove_list[::-1]:
+            del new_seasons[i]
 
+        data_file_path = os.path.join(self.data_dir, 'data.json')
+        game_data_file_path = os.path.join(self.data_dir, 'game-data.json')
 
-    
+        with open(data_file_path, "r", encoding='utf-8') as file:
+                data = json.load(file)
+        all_seasons = []
+        for s in data["Frames"].keys():
+            all_seasons.append((int(s[1:])))
+
+        seasons = list(set(new_seasons).intersection(all_seasons))
+        if len(seasons) == 0:
+            seasons = all_seasons
+        s_entry = ""
+        for s in seasons:
+            s_entry += str(s) + ', '
+        self.season_entry.delete(0, tk.END)
+        self.season_entry.insert(0, s_entry[:-2])
+        
+        try: 
+            reports = int(self.report_entry.get())
+        except:
+            reports = 1
+
+        self.report_entry.delete(0, tk.END)
+        self.report_entry.insert(0, reports)
+
+        with open(game_data_file_path,"w", encoding='utf-8') as file:
+                game_data = {
+                    "Settings":{"Seasons":s_entry[:-2],"Synopsis": self.syn.get(),"Report": reports}
+                }
+                json.dump(game_data, file, ensure_ascii=False, indent=4)
     
 
 def main():
