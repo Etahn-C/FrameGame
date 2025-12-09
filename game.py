@@ -3,6 +3,7 @@ from tkinter import filedialog as fd
 from PIL import ImageTk, Image
 import json
 import os
+import random
 
 
 class FrameGame(tk.Tk):
@@ -11,11 +12,13 @@ class FrameGame(tk.Tk):
         self.title("FrameGame!")
         self.geometry("680x580")
         self.config(background="#808080")
+        
         self.bg = "#808080"
         self.button_color = "#A0A0A0"
         self.y=1/29
         self.x=1/34
-        
+        self.game_dir = ""
+                
         container = tk.Frame(self)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
@@ -30,10 +33,14 @@ class FrameGame(tk.Tk):
 
         self.show_page(main_screen)
 
+
     def show_page(self, page_class):
         """Bring a page to the front."""
         page = self.pages[page_class]
         page.tkraise()
+        
+        if hasattr(page, "on_show"):
+            page.on_show()
 
 
     def resize_image(self, event=None):
@@ -53,23 +60,29 @@ class FrameGame(tk.Tk):
         # center the image
         self.image_canvas.create_image(canvas_w/2, canvas_h/2, anchor="center", image=tk_img)
 
+
 class main_screen(tk.Frame):
     def __init__(self, parent, controller):
+        self.controller = controller
         self.bg = controller.bg
         self.button_color = controller.button_color
         self.y = controller.y
         self.x = controller.x
+        self.score = -1
+        self.dir_path = controller.game_dir
+        self.all_frames = []
+        
         super().__init__(parent, bg=self.bg)
         # Title bar:
-        title_bar = tk.Label(self, text="Frame Game: My Little Pony Edition", bg=self.bg)
-        title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
+        self.title_bar = tk.Label(self, text="Frame Game", bg=self.bg)
+        self.title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
         
         # Image Info: 
-        image_info_label = tk.Label(self, bg=self.bg, text="From SXXEXX at XX:XX ---- Score: 27/79")
-        image_info_label.place(relheight=self.y, relwidth=16*self.x, relx=9*self.x, rely=19*self.y)
+        self.image_info_label = tk.Label(self, bg=self.bg, text="From SXXEXX at XX:XX ---- Score: 27/79")
+        self.image_info_label.place(relheight=self.y, relwidth=16*self.x, relx=9*self.x, rely=19*self.y)
         
         # Search Bar:
-        search_bar = tk.Entry(self, bg=self.bg)
+        search_bar = tk.Entry(self, bg=self.button_color)
         search_bar.place(relheight=self.y, relwidth=24*self.x, relx=self.x, rely=20*self.y)
         seach_menu_canvas = tk.Canvas(self, bg=self.bg)
         seach_menu_canvas.place(relheight=7*self.y, relwidth=24*self.x, relx=1*self.x, rely=21*self.y)
@@ -78,10 +91,10 @@ class main_screen(tk.Frame):
         search_menu.place(relheight=1, relwidth=1, relx=0, rely=0)
         
         # Game Buttons
-        next_button = tk.Button(self, text="Next / Skip", bg=self.bg)
-        report_button = tk.Button(self, text="Report Frame", bg=self.bg)
-        restart_button = tk.Button(self, text="Restart", bg=self.bg)
-        settings_button = tk.Button(self, text="Settings", bg=self.bg, command=lambda: controller.show_page(settings_screen))
+        next_button = tk.Button(self, text="Next / Skip", bg=self.button_color, command=lambda: self.new_frame())
+        report_button = tk.Button(self, text="Report Frame", bg=self.button_color)
+        restart_button = tk.Button(self, text="Restart", bg=self.button_color)
+        settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (controller.show_page(settings_screen)))
         next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
         report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
         restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
@@ -90,14 +103,80 @@ class main_screen(tk.Frame):
         # Image Box:
         self.image_canvas = tk.Canvas(self, bg=self.bg)
         self.image_canvas.place(relheight=18*self.y, relwidth=32*self.x, relx=self.x, rely=self.y)
-        self.img = Image.open(r"C:\Users\Couto\Personal\Coding\FrameGame\test-folder\frame-data\Season 01\My Little Pony Friendship Is Magic S01E01 - F001.jpg")
+        self.img = Image.open(r"./start_image.jpg")
+        self.controller.image_canvas = self.image_canvas
+        self.controller.img = self.img
+    
+    def on_show(self):
+        self.dir_path = self.controller.game_dir
+        if self.dir_path != "":
+            game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
+            frame_data_file_path = os.path.join(self.dir_path, 'data.json')
+            try:
+                with open(game_data_file_path, "r", encoding='utf-8') as file:
+                    data = json.load(file)
+                with open(frame_data_file_path, "r", encoding='utf-8') as file:
+                    frame_data = json.load(file)
+                    
+                self.title = frame_data["Settings"]["Title"]
+                self.syn = data["Settings"]["Synopsis"]
+                self.reports = data["Settings"]["Report"]
+                
+                self.season_select = []
+                for x in data["Settings"]["Seasons"].split(','):
+                    self.season_select.append(int(x))
+                self.title_bar['text'] = f"FrameGame: {self.title}"
+                
+                self.img = Image.open(r"./start_image.jpg")
+            except:
+                pass
+        else:
+            self.img = Image.open(r"./default_image.jpg")
         
+        self.controller.img = self.img
+        self.controller.resize_image()
+            
+    def update_game_dir(self):
+        self.controller.game_dir = self.dir_path
+    
+    def new_frame(self):
+        with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
+            frame_data = json.load(file)
+        with open(os.path.join(self.dir_path, "game-data.json"), 'r', encoding='utf-8') as file:
+            game_data = json.load(file)
+        
+        rand_season_index = random.randrange(0, len(self.season_select))
+        rand_season = f"S{self.season_select[rand_season_index]:02}"
+        rand_episode_index = random.randrange(0, len(frame_data["Frames"][rand_season].keys()))
+        rand_episode = list(frame_data["Frames"][rand_season].keys())[rand_episode_index]
+        rand_frame_index = random.randrange(0, len(frame_data["Frames"][rand_season][rand_episode].keys()))
+        rand_frame = list(frame_data["Frames"][rand_season][rand_episode].keys())[rand_frame_index]
+        if len(self.all_frames) == 0:
+            for root, _, files in os.walk(self.dir_path):
+                for name in files:
+                    self.all_frames.append(os.path.join(root, name))
+        for frame in self.all_frames:
+            if f"{rand_season}{rand_episode} - {rand_frame}" in frame:
+                self.img = Image.open(frame)
+                exit
+        self.controller.img = self.img
+        self.controller.resize_image()
+        self.current_season = rand_season
+        self.current_episode = rand_episode
+        self.current_frame = rand_frame
+        self.current_frame_time = frame_data["Frames"][rand_season][rand_episode][rand_frame]["time"]
+        time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
+        # TODO not gonna leave this, just for testing
+        self.image_info_label['text'] = f"{rand_season}{rand_episode} - {time}"
+        pass
+
 class settings_screen(tk.Frame):
     def __init__(self, parent, controller):
         self.bg = controller.bg
         self.button_color = controller.button_color
         self.y = controller.y
         self.x = controller.x
+        self.controller = controller
         self.data_dir = ""
         super().__init__(parent, bg=self.bg)
 
@@ -139,7 +218,7 @@ class settings_screen(tk.Frame):
         self.save_button = tk.Button(self, text="Save Settings", bg=self.button_color, command=lambda: self.save_settings())
         self.save_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=14*self.y)
         
-        self.return_button = tk.Button(self, text="Return to Main Menu", bg=self.button_color, command=lambda: controller.show_page(main_screen))
+        self.return_button = tk.Button(self, text="Return to Main Menu", bg=self.button_color, command=lambda: (self.update_game_dir(), controller.show_page(main_screen)))
         self.return_button.place(relheight=self.y, relwidth=14*self.x, relx=10*self.x, rely=17*self.y)
         
         self.default_button = tk.Button(self, text="Default Settings", fg="#AA0000", bg=self.button_color, command=lambda: self.default_settings(self.data_dir))
@@ -147,6 +226,9 @@ class settings_screen(tk.Frame):
 
         self.update_disabled_widgets()
 
+    
+    def update_game_dir(self):
+        self.controller.game_dir = self.data_dir
 
 
     def change_file(self):
@@ -179,6 +261,7 @@ class settings_screen(tk.Frame):
             self.season_entry.config(state=tk.NORMAL)
             self.synopsis_radio_no.config(state=tk.NORMAL)
             self.synopsis_radio_yes.config(state=tk.NORMAL)
+
 
     def import_settings(self, path):
         try:
@@ -219,6 +302,7 @@ class settings_screen(tk.Frame):
                 json.dump(game_data, file, ensure_ascii=False, indent=4)
         except:
             pass
+
 
     def save_settings(self):
         new_seasons = self.season_entry.get().split(',')
@@ -272,8 +356,6 @@ def main():
     main_page = window.pages[main_screen]
 
     # connect resize binding to the main page's canvas
-    window.image_canvas = main_page.image_canvas
-    window.img = main_page.img
 
     window.image_canvas.bind("<Configure>", window.resize_image)
     window.mainloop()
