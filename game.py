@@ -78,27 +78,27 @@ class main_screen(tk.Frame):
         self.title_bar.place(relheight=self.y, relwidth=28*self.x, relx=3*self.x, rely=self.y*0)
         
         # Image Info: 
-        self.image_info_label = tk.Label(self, bg=self.bg, text="From SXXEXX at XX:XX ---- Score: 27/79")
+        self.image_info_label = tk.Label(self, bg=self.bg, text="")
         self.image_info_label.place(relheight=self.y, relwidth=16*self.x, relx=9*self.x, rely=19*self.y)
         
         # Search Bar:
-        search_bar = tk.Entry(self, bg=self.button_color)
-        search_bar.place(relheight=self.y, relwidth=24*self.x, relx=self.x, rely=20*self.y)
-        seach_menu_canvas = tk.Canvas(self, bg=self.bg)
-        seach_menu_canvas.place(relheight=7*self.y, relwidth=24*self.x, relx=1*self.x, rely=21*self.y)
-        search_menu = tk.Listbox(seach_menu_canvas, bg=self.bg)
-        search_menu.insert(tk.END, "S01E01 : Friendship Is Magic - Part 1 (Mare in the Moon) : After being warned of a ","horrible prophecy, Princess Celestia sends her overly studious student Twilight Sparkle to ", "Ponyville to supervise the preparations for the Summer Sun Celebration and to \"make ", "some friends\".", "2", "3", "1", "2", "3", "1", "2", "3")
-        search_menu.place(relheight=1, relwidth=1, relx=0, rely=0)
+        self.search_bar = tk.Entry(self, bg=self.button_color)
+        self.search_bar.place(relheight=self.y, relwidth=24*self.x, relx=self.x, rely=20*self.y)
+        self.search_menu_canvas = tk.Canvas(self, bg=self.bg)
+        self.search_menu_canvas.place(relheight=7*self.y, relwidth=24*self.x, relx=1*self.x, rely=21*self.y)
+        self.search_menu = tk.Listbox(self.search_menu_canvas, bg=self.bg)
+        #self.search_menu.insert(tk.END, "S01E01 : Friendship Is Magic - Part 1 (Mare in the Moon) : After being warned of a ","horrible prophecy, Princess Celestia sends her overly studious student Twilight Sparkle to ", "Ponyville to supervise the preparations for the Summer Sun Celebration and to \"make ", "some friends\".", "2", "3", "1", "2", "3", "1", "2", "3")
+        self.search_menu.place(relheight=1, relwidth=1, relx=0, rely=0)
         
         # Game Buttons
-        next_button = tk.Button(self, text="Next / Skip", bg=self.button_color, command=lambda: self.new_frame())
-        report_button = tk.Button(self, text="Report Frame", bg=self.button_color)
-        restart_button = tk.Button(self, text="Restart", bg=self.button_color)
-        settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (controller.show_page(settings_screen)))
-        next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
-        report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
-        restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
-        settings_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=26*self.y)
+        self.next_button = tk.Button(self, text="Next / Skip", bg=self.button_color, command=lambda: self.new_frame())
+        self.report_button = tk.Button(self, text="Report Frame", bg=self.button_color)
+        self.restart_button = tk.Button(self, text="Restart", bg=self.button_color)
+        self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (controller.show_page(settings_screen)))
+        self.next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
+        self.report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
+        self.restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
+        self.settings_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=26*self.y)
         
         # Image Box:
         self.image_canvas = tk.Canvas(self, bg=self.bg)
@@ -107,8 +107,22 @@ class main_screen(tk.Frame):
         self.controller.image_canvas = self.image_canvas
         self.controller.img = self.img
     
+    def update_disabled_widgets(self):
+        if self.dir_path == "":
+            self.next_button.config(state=tk.DISABLED)
+            self.report_button.config(state=tk.DISABLED)
+            self.restart_button.config(state=tk.DISABLED)
+            self.search_bar.config(state=tk.DISABLED)
+            self.search_menu.config(state=tk.DISABLED)
+        else:
+            self.next_button.config(state=tk.NORMAL)
+            self.report_button.config(state=tk.NORMAL)
+            self.restart_button.config(state=tk.NORMAL)
+            self.search_bar.config(state=tk.NORMAL)
+    
     def on_show(self):
         self.dir_path = self.controller.game_dir
+        self.update_disabled_widgets()
         if self.dir_path != "":
             game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
             frame_data_file_path = os.path.join(self.dir_path, 'data.json')
@@ -132,6 +146,8 @@ class main_screen(tk.Frame):
                 pass
         else:
             self.img = Image.open(r"./default_image.jpg")
+            self.title_bar['text'] = "FrameGame"
+            self.image_info_label['text'] = ""
         
         self.controller.img = self.img
         self.controller.resize_image()
@@ -142,8 +158,6 @@ class main_screen(tk.Frame):
     def new_frame(self):
         with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
             frame_data = json.load(file)
-        with open(os.path.join(self.dir_path, "game-data.json"), 'r', encoding='utf-8') as file:
-            game_data = json.load(file)
         
         rand_season_index = random.randrange(0, len(self.season_select))
         rand_season = f"S{self.season_select[rand_season_index]:02}"
@@ -212,7 +226,6 @@ class settings_screen(tk.Frame):
         self.synopsis_radio_no.place(relheight=self.y, relwidth=3*self.x, relx=13*self.x, rely=self.y*8)
         
         self.report_entry = tk.Entry(self, bg=self.button_color, relief='raised')
-        self.report_entry.insert(0, 1)
         self.report_entry.place(relheight=self.y, relwidth=4*self.x, relx=10*self.x, rely=self.y*11)
         
         self.save_button = tk.Button(self, text="Save Settings", bg=self.button_color, command=lambda: self.save_settings())
@@ -235,8 +248,13 @@ class settings_screen(tk.Frame):
         self.data_dir = fd.askdirectory(title="Choose Game Data Directory", mustexist=True)
         if not os.path.exists(os.path.join(self.data_dir, "data.json")):
             self.data_dir = ""
+            self.file_button["text"] = "No Current Directory"
+            self.syn.set(1)
+            self.season_entry.delete(0, tk.END)
+            self.season_entry.insert(0, "")
+            self.report_entry.delete(0, tk.END)
+            self.report_entry.insert(0, "")
             self.update_disabled_widgets()
-            self.file_button["text"] = self.data_dir
             return
         self.file_button["text"] = self.data_dir
         self.update_disabled_widgets()
@@ -283,7 +301,6 @@ class settings_screen(tk.Frame):
         try:
             with open(data_file_path, "r", encoding='utf-8') as file:
                 data = json.load(file)
-            title = data["Settings"]["Title"]
             seasons = ""
             for s in data["Frames"].keys():
                 seasons += str(int(s[1:])) + ', '
@@ -297,7 +314,7 @@ class settings_screen(tk.Frame):
 
             with open(game_data_file_path,"w", encoding='utf-8') as file:
                 game_data = {
-                    "Settings":{"Title":title, "Seasons":seasons,"Synopsis": 1,"Report": 1,}
+                    "Settings":{"Seasons":seasons,"Synopsis": 1,"Report": 1,}
                 }
                 json.dump(game_data, file, ensure_ascii=False, indent=4)
         except:
