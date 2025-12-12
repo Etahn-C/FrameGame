@@ -4,6 +4,9 @@ from PIL import ImageTk, Image
 import json
 import os
 import random
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
+import re
 
 
 class FrameGame(tk.Tk):
@@ -12,7 +15,7 @@ class FrameGame(tk.Tk):
         self.title("FrameGame!")
         self.geometry("680x580")
         self.config(background="#808080")
-        
+        self.width = 680
         self.bg = "#808080"
         self.button_color = "#A0A0A0"
         self.y=1/29
@@ -45,6 +48,7 @@ class FrameGame(tk.Tk):
 
     def resize_image(self, event=None):
         canvas_w = self.image_canvas.winfo_width()
+        self.width = canvas_w
         canvas_h = self.image_canvas.winfo_height()
         if canvas_w < 5 or canvas_h < 5:
             return
@@ -71,6 +75,9 @@ class main_screen(tk.Frame):
         self.score = -1
         self.dir_path = controller.game_dir
         self.all_frames = []
+        self.all_ep_data = {}
+        self.title_map = {}
+        self.synopsis_map = {}
         
         super().__init__(parent, bg=self.bg)
         # Title bar:
@@ -84,17 +91,63 @@ class main_screen(tk.Frame):
         # Search Bar:
         self.search_bar = tk.Entry(self, bg=self.button_color)
         self.search_bar.place(relheight=self.y, relwidth=24*self.x, relx=self.x, rely=20*self.y)
+        # Search menu container
         self.search_menu_canvas = tk.Canvas(self, bg=self.bg)
-        self.search_menu_canvas.place(relheight=7*self.y, relwidth=24*self.x, relx=1*self.x, rely=21*self.y)
-        self.search_menu = tk.Listbox(self.search_menu_canvas, bg=self.bg)
-        #self.search_menu.insert(tk.END, "S01E01 : Friendship Is Magic - Part 1 (Mare in the Moon) : After being warned of a ","horrible prophecy, Princess Celestia sends her overly studious student Twilight Sparkle to ", "Ponyville to supervise the preparations for the Summer Sun Celebration and to \"make ", "some friends\".", "2", "3", "1", "2", "3", "1", "2", "3")
-        self.search_menu.place(relheight=1, relwidth=1, relx=0, rely=0)
+        self.search_menu_canvas.place(relheight=7*self.y, relwidth=23*self.x, relx=1*self.x, rely=21*self.y)
+
+        self.search_menu_canvas.bind("<Enter>", lambda e: self.search_menu_canvas.bind_all("<MouseWheel>", self._on_mousewheel))
+        self.search_menu_canvas.bind("<Leave>", lambda e: self.search_menu_canvas.unbind_all("<MouseWheel>"))
+
+        
+        # Scrollbar
+        scroll_bar = tk.Scrollbar(self, orient="vertical", command=self.search_menu_canvas.yview)
+        scroll_bar.place(relheight=7*self.y, relwidth=1*self.x, relx=24*self.x, rely=21*self.y)
+
+        self.search_menu_canvas.configure(yscrollcommand=scroll_bar.set)
+
+        # Frame inside the canvas
+        self.scrollable_frame = tk.Frame(self.search_menu_canvas, bg=self.bg)
+        self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
+
+        # Expand scrollregion when contents change
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.search_menu_canvas.configure(
+                scrollregion=self.search_menu_canvas.bbox("all")
+            )
+        )
+
+        # Add the frame into the canvas and store window ID
+        self.inner_window_id = self.search_menu_canvas.create_window(
+            (0, 0),
+            window=self.scrollable_frame,
+            anchor="nw"
+        )
+
+        # Make inner frame always stretch full width
+        self.search_menu_canvas.bind(
+            "<Configure>",
+            lambda e: self.search_menu_canvas.itemconfig(
+                self.inner_window_id,
+                width=e.width
+            )
+        )
+
+        # Add the radiobuttons
+        self.selected_ep = tk.StringVar()   
+        self.default_ep = ""     
+        self.menu1 = tk.Radiobutton(self.scrollable_frame, text="", value="", variable=self.selected_ep, indicatoron=False, bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
+        self.menu2 = tk.Radiobutton(self.scrollable_frame, text="", value="", variable=self.selected_ep, indicatoron=False, bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
+        self.menu3 = tk.Radiobutton(self.scrollable_frame, text="", value="", variable=self.selected_ep, indicatoron=False, bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
+        self.menu4 = tk.Radiobutton(self.scrollable_frame, text="", value="", variable=self.selected_ep, indicatoron=False, bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
+        self.menu5 = tk.Radiobutton(self.scrollable_frame, text="", value="", variable=self.selected_ep, indicatoron=False, bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
+        self.menus = {"menu_1": self.menu1,"menu_2": self.menu2,"menu_3": self.menu3,"menu_4": self.menu4,"menu_5": self.menu5}
         
         # Game Buttons
         self.next_button = tk.Button(self, text="Next / Skip", bg=self.button_color, command=lambda: self.new_frame())
         self.report_button = tk.Button(self, text="Report Frame", bg=self.button_color)
         self.restart_button = tk.Button(self, text="Restart", bg=self.button_color)
-        self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (controller.show_page(settings_screen)))
+        self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (self.settings_page()))
         self.next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
         self.report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
         self.restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
@@ -106,22 +159,40 @@ class main_screen(tk.Frame):
         self.img = Image.open(r"./start_image.jpg")
         self.controller.image_canvas = self.image_canvas
         self.controller.img = self.img
+
+    def _on_mousewheel(self, event):
+        self.search_menu_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
+    def settings_page(self):
+        self.controller.show_page(settings_screen)
+        self.search_bar.delete(0,tk.END)
+        self.search_bar.config(state=tk.DISABLED)
     
+
     def update_disabled_widgets(self):
         if self.dir_path == "":
             self.next_button.config(state=tk.DISABLED)
             self.report_button.config(state=tk.DISABLED)
             self.restart_button.config(state=tk.DISABLED)
-            self.search_bar.config(state=tk.DISABLED)
-            self.search_menu.config(state=tk.DISABLED)
+            self.search_bar.config(state=tk.DISABLED)            
         else:
             self.next_button.config(state=tk.NORMAL)
             self.report_button.config(state=tk.NORMAL)
             self.restart_button.config(state=tk.NORMAL)
             self.search_bar.config(state=tk.NORMAL)
-    
+
+
     def on_show(self):
+        if self.dir_path != self.controller.game_dir and self.controller.game_dir != "":
+            ep_data_file_path = os.path.join(self.controller.game_dir, 'ep-data.json')
+            with open(ep_data_file_path, "r", encoding='utf-8') as file:
+                data = json.load(file)
+                self.all_ep_data = data
+                self.title_map = { ep_id: info["title"] for ep_id, info in data.items() }
+                self.synopsis_map = { ep_id: info["synopsis"] for ep_id, info in data.items() }
         self.dir_path = self.controller.game_dir
+        
         self.update_disabled_widgets()
         if self.dir_path != "":
             game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
@@ -151,10 +222,14 @@ class main_screen(tk.Frame):
         
         self.controller.img = self.img
         self.controller.resize_image()
-            
+        self.resize_radios()
+        
+
+   
     def update_game_dir(self):
         self.controller.game_dir = self.dir_path
-    
+
+
     def new_frame(self):
         with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
             frame_data = json.load(file)
@@ -182,7 +257,59 @@ class main_screen(tk.Frame):
         time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
         # TODO not gonna leave this, just for testing
         self.image_info_label['text'] = f"{rand_season}{rand_episode} - {time}"
-        pass
+
+
+    def on_search(self, event):
+        query = self.search_bar.get()
+        result = [] 
+        if len(query) > 3:
+            regex_search = re.search(r"([Ss]\d?[1-9])([Ee]\d?[1-9])", query)
+            if regex_search:
+                season_no = regex_search.group(1)
+                episode_no = regex_search.group(2)
+                episode = f"S{int(season_no[1:]):02}E{int(episode_no[1:]):02}"
+                if episode in list(self.all_ep_data.keys()):
+                    result.append([episode, 100])
+
+            # Fuzzy Time??
+            for r in process.extract(query, self.title_map):
+                result.append([r[2], r[1]])
+            for r in process.extract(query, self.synopsis_map, limit=10):
+                result.append([r[2], r[1]])
+            # Displaying
+            result.sort(key=lambda x: x[1], reverse=True)
+            results = []
+            for x in result:
+                results.append(x[0])
+            results = list(dict.fromkeys(results))
+            self.default_ep = results
+            menus_list = list(self.menus.keys())
+            for i in range(len(menus_list)):
+                self.menus[menus_list[i]].pack(fill='x')
+                menu_text = f"{results[i]} : {self.all_ep_data[results[i]]['title']}\n{self.all_ep_data[results[i]]['synopsis']}"
+                self.menus[menus_list[i]].config(text=menu_text, value=results[i])
+                
+        else:
+            for menu in self.menus.keys():
+                self.menus[menu].pack_forget()
+                self.selected_ep.set("")
+            
+
+    def resize_radios(self, event=None):
+        self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
+        for menu in self.menus.keys():
+            self.menus[menu].config(wraplength=self.scrollabe_frame_width)
+
+
+    def on_submit(self, event=None):
+        if self.search_bar.get() != "":
+            if self.selected_ep.get() == "":
+                print(self.default_ep[0])
+            else:
+                print(self.selected_ep.get())
+            self.search_bar.delete(0, tk.END)
+            #self.new_frame()
+
 
 class settings_screen(tk.Frame):
     def __init__(self, parent, controller):
@@ -373,8 +500,10 @@ def main():
     main_page = window.pages[main_screen]
 
     # connect resize binding to the main page's canvas
-
+    main_page.search_bar.bind("<KeyRelease>", main_page.on_search)
+    main_page.search_bar.bind("<Return>", main_page.on_submit)
     window.image_canvas.bind("<Configure>", window.resize_image)
+    main_page.controller.image_canvas.bind("<Configure>", main_page.resize_radios)
     window.mainloop()
 
 if __name__ == "__main__":
