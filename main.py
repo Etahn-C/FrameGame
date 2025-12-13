@@ -229,9 +229,9 @@ def main():
     API_KEY = os.getenv("OMDB_API_KEY")
     
     # Will create the data file if not already made.
-    if (not os.path.isfile(os.path.join(output_dir, "data.json"))) or (data_override):
+    if (not os.path.isfile(os.path.join(output_dir, "frame-data.json"))) or (data_override):
         print("\nCreating Data File")
-        with open(os.path.join(output_dir, "data.json"), "w", encoding='utf-8') as file:
+        with open(os.path.join(output_dir, "frame-data.json"), "w", encoding='utf-8') as file:
             data = {"Settings":{"RandomTiming": frame_timing, "Framerate": f"{framerate}", "Title": title}, "Frames":{}}
             json.dump(data, file, ensure_ascii=False, indent=4)  
         print("Data File Created")
@@ -250,7 +250,7 @@ def main():
     
     # Double checks if you want to extract the frames 
     if get_response("\nDo you want to run the files, can take a long time! (yes/no): ", ["yes","no"], [True, False]):
-        run_files(input_dir, output_dir, frame_timing, fps, os.path.join(output_dir, "data.json"))
+        run_files(input_dir, output_dir, frame_timing, fps, os.path.join(output_dir, "frame-data.json"))
     
     input("\nPress enter to exit")
 

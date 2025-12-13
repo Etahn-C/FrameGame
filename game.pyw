@@ -194,7 +194,7 @@ class main_screen(tk.Frame):
             self.dir_path = self.controller.game_dir
             ep_data_file_path = os.path.join(self.dir_path, 'ep-data.json')
             game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
-            frame_data_file_path = os.path.join(self.dir_path, 'data.json')
+            frame_data_file_path = os.path.join(self.dir_path, 'frame-data.json')
             self.img = Image.open(r"./game_images/start_image.jpg")
             
             # Settings load
@@ -244,7 +244,7 @@ class main_screen(tk.Frame):
         else:
             self.report_button['text'] = "Report Frame"
             self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["reports"] += 1
-            with open(os.path.join(self.dir_path, "data.json"), 'w', encoding='utf-8') as file:
+            with open(os.path.join(self.dir_path, "frame-data.json"), 'w', encoding='utf-8') as file:
                 json.dump(self.frame_data, file, ensure_ascii=False, indent=4)
             self.num_questions -= 1
             self.answered = True
@@ -287,7 +287,7 @@ class main_screen(tk.Frame):
         self.report_button['text'] = "Report Frame"
         # Removes disallowed frames from pool
         if len(self.frame_data) == 0:
-            with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
+            with open(os.path.join(self.dir_path, "frame-data.json"), 'r', encoding='utf-8') as file:
                 self.frame_data = json.load(file)
                 self.allowed_frames = copy.deepcopy(self.frame_data)
                 for s in list(self.allowed_frames["Frames"].keys()):
@@ -483,7 +483,7 @@ class settings_screen(tk.Frame):
         
     def change_file(self):
         self.data_dir = fd.askdirectory(title="Choose Game Data Directory", mustexist=True)
-        if not os.path.exists(os.path.join(self.data_dir, "data.json")):
+        if not os.path.exists(os.path.join(self.data_dir, "frame-data.json")):
             self.data_dir = ""
             self.file_button["text"] = "No Current Directory"
             self.syn.set(1)
@@ -535,7 +535,7 @@ class settings_screen(tk.Frame):
 
 
     def default_settings(self, path):
-        data_file_path = os.path.join(path, 'data.json')
+        data_file_path = os.path.join(path, 'frame-data.json')
         game_data_file_path = os.path.join(path, 'game-data.json')
         
         try:
@@ -572,7 +572,7 @@ class settings_screen(tk.Frame):
         for i in remove_list[::-1]:
             del new_seasons[i]
 
-        data_file_path = os.path.join(self.data_dir, 'data.json')
+        data_file_path = os.path.join(self.data_dir, 'frame-data.json')
         game_data_file_path = os.path.join(self.data_dir, 'game-data.json')
 
         with open(data_file_path, "r", encoding='utf-8') as file:
