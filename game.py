@@ -4,9 +4,9 @@ from PIL import ImageTk, Image
 import json
 import os
 import random
-from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 import re
+import copy
 
 
 class FrameGame(tk.Tk):
@@ -73,11 +73,18 @@ class main_screen(tk.Frame):
         self.y = controller.y
         self.x = controller.x
         self.score = -1
+        self.dir_path = ""
         self.dir_path = controller.game_dir
         self.all_frames = []
         self.all_ep_data = {}
         self.title_map = {}
         self.synopsis_map = {}
+        self.frame_data = {}
+        self.allowed_frames = {}
+        self.answered = False
+        self.score = 0
+        self.num_questions = 0
+        self.prev_frames = []
         
         super().__init__(parent, bg=self.bg)
         # Title bar:
@@ -86,7 +93,11 @@ class main_screen(tk.Frame):
         
         # Image Info: 
         self.image_info_label = tk.Label(self, bg=self.bg, text="")
-        self.image_info_label.place(relheight=self.y, relwidth=16*self.x, relx=9*self.x, rely=19*self.y)
+        self.image_info_label.place(relheight=self.y, relwidth=24*self.x, relx=1*self.x, rely=19*self.y)
+        
+        # Score Info
+        self.score_label = tk.Label(self, bg=self.bg, text="")
+        self.score_label.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=19*self.y)
         
         # Search Bar:
         self.search_bar = tk.Entry(self, bg=self.button_color)
@@ -110,28 +121,13 @@ class main_screen(tk.Frame):
         self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
 
         # Expand scrollregion when contents change
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.search_menu_canvas.configure(
-                scrollregion=self.search_menu_canvas.bbox("all")
-            )
-        )
+        self.scrollable_frame.bind("<Configure>",lambda e: self.search_menu_canvas.configure(scrollregion=self.search_menu_canvas.bbox("all")))
 
         # Add the frame into the canvas and store window ID
-        self.inner_window_id = self.search_menu_canvas.create_window(
-            (0, 0),
-            window=self.scrollable_frame,
-            anchor="nw"
-        )
+        self.inner_window_id = self.search_menu_canvas.create_window((0, 0),window=self.scrollable_frame,anchor="nw")
 
         # Make inner frame always stretch full width
-        self.search_menu_canvas.bind(
-            "<Configure>",
-            lambda e: self.search_menu_canvas.itemconfig(
-                self.inner_window_id,
-                width=e.width
-            )
-        )
+        self.search_menu_canvas.bind("<Configure>",lambda e: self.search_menu_canvas.itemconfig(self.inner_window_id,width=e.width))
 
         # Add the radiobuttons
         self.selected_ep = tk.StringVar()   
@@ -144,10 +140,10 @@ class main_screen(tk.Frame):
         self.menus = {"menu_1": self.menu1,"menu_2": self.menu2,"menu_3": self.menu3,"menu_4": self.menu4,"menu_5": self.menu5}
         
         # Game Buttons
-        self.next_button = tk.Button(self, text="Next / Skip", bg=self.button_color, command=lambda: self.new_frame())
-        self.report_button = tk.Button(self, text="Report Frame", bg=self.button_color)
-        self.restart_button = tk.Button(self, text="Restart", bg=self.button_color)
-        self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=lambda: (self.settings_page()))
+        self.next_button = tk.Button(self, text="Start", bg=self.button_color, command=self.new_frame)
+        self.report_button = tk.Button(self, text="Report Frame", bg=self.button_color, command=self.report)
+        self.restart_button = tk.Button(self, text="Restart", bg=self.button_color, command=self.restart)
+        self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=self.settings_page)
         self.next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
         self.report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
         self.restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
@@ -156,10 +152,8 @@ class main_screen(tk.Frame):
         # Image Box:
         self.image_canvas = tk.Canvas(self, bg=self.bg)
         self.image_canvas.place(relheight=18*self.y, relwidth=32*self.x, relx=self.x, rely=self.y)
-        self.img = Image.open(r"./start_image.jpg")
-        self.controller.image_canvas = self.image_canvas
-        self.controller.img = self.img
-
+        self.img = Image.open(r"./game_images/default_image.jpg")
+        
     def _on_mousewheel(self, event):
         self.search_menu_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
@@ -211,59 +205,107 @@ class main_screen(tk.Frame):
                 for x in data["Settings"]["Seasons"].split(','):
                     self.season_select.append(int(x))
                 self.title_bar['text'] = f"FrameGame: {self.title}"
-                
-                self.img = Image.open(r"./start_image.jpg")
             except:
                 pass
+            self.img = Image.open(r"./game_images/start_image.jpg")
         else:
-            self.img = Image.open(r"./default_image.jpg")
+            self.img = Image.open(r"./game_images/default_image.jpg")
             self.title_bar['text'] = "FrameGame"
             self.image_info_label['text'] = ""
-        
+        self.controller.image_canvas = self.image_canvas
         self.controller.img = self.img
-        self.controller.resize_image()
+        self.controller.after(50, self.controller.resize_image)
         self.resize_radios()
         
+
+    def report(self):
+        self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["reports"] += 1
+        with open(os.path.join(self.dir_path, "data.json"), 'w', encoding='utf-8') as file:
+            json.dump(self.frame_data, file, ensure_ascii=False, indent=4)
+        self.num_questions -= 1
+        self.new_frame()
 
    
     def update_game_dir(self):
         self.controller.game_dir = self.dir_path
 
 
-    def new_frame(self):
-        with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
-            frame_data = json.load(file)
+    def restart(self):
+        self.answered = False
+        self.score = 0
+        self.num_questions = 0
+        self.img = Image.open(r"./game_images/start_image.jpg")
+        self.controller.img = self.img
+        self.controller.resize_image()
+        self.image_info_label['text'] = f""
+        self.score_label['text'] = f""
+        self.next_button['text'] = "Start"
+        self.allowed_frames = {}
+        self.frame_data = {}
         
-        rand_season_index = random.randrange(0, len(self.season_select))
-        rand_season = f"S{self.season_select[rand_season_index]:02}"
-        rand_episode_index = random.randrange(0, len(frame_data["Frames"][rand_season].keys()))
-        rand_episode = list(frame_data["Frames"][rand_season].keys())[rand_episode_index]
-        rand_frame_index = random.randrange(0, len(frame_data["Frames"][rand_season][rand_episode].keys()))
-        rand_frame = list(frame_data["Frames"][rand_season][rand_episode].keys())[rand_frame_index]
+    def get_random_frame(self):
+        rand_season_index = random.randrange(0, len(self.allowed_frames["Frames"].keys()))
+        rand_season = list(self.allowed_frames["Frames"].keys())[rand_season_index]
+        rand_episode_index = random.randrange(0, len(self.allowed_frames["Frames"][rand_season].keys()))
+        rand_episode = list(self.allowed_frames["Frames"][rand_season].keys())[rand_episode_index]
+        rand_frame_index = random.randrange(0, len(self.allowed_frames["Frames"][rand_season][rand_episode].keys()))
+        rand_frame = list(self.allowed_frames["Frames"][rand_season][rand_episode].keys())[rand_frame_index] 
+        if self.allowed_frames["Frames"][rand_season][rand_episode][rand_frame]["reports"] >= self.reports or f"{rand_season}{rand_episode} - {rand_frame}" in self.prev_frames:
+            del self.allowed_frames["Frames"][rand_season][rand_episode][rand_frame]
+            if len(self.allowed_frames["Frames"][rand_season][rand_episode]) == 0:
+                del self.allowed_frames["Frames"][rand_season][rand_episode]
+            return self.get_random_frame()
+        return rand_season, rand_episode, rand_frame
+
+
+    def new_frame(self):
+        if len(self.frame_data) == 0:
+            with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
+                self.frame_data = json.load(file)
+                self.allowed_frames = copy.deepcopy(self.frame_data)
+                for s in list(self.allowed_frames["Frames"].keys()):
+                    if int(s[1:]) not in self.season_select:
+                        del self.allowed_frames["Frames"][s]
+                for s in list(self.allowed_frames["Frames"].keys()):
+                    for e in list(self.allowed_frames["Frames"][s].keys()):
+                        for f in list(self.allowed_frames["Frames"][s][e].keys()):
+                            if self.allowed_frames["Frames"][s][e][f]['reports'] >= self.reports:
+                                del self.allowed_frames["Frames"][s][e][f]
+                        if len(self.allowed_frames["Frames"][s][e].keys()) == 0:
+                            del self.allowed_frames["Frames"][s][e]
+                            
+                    if len(self.allowed_frames["Frames"][s].keys()) == 0:
+                        del self.allowed_frames["Frames"][s]
+                        
+        self.next_button['text'] = "Skip"
+        if self.num_questions == 0:
+            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({100.00:.2f}%)"
+        else:
+            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({self.score/self.num_questions*100:.2f}%)"
+        self.num_questions += 1
+        self.answered = False
+        
+        self.current_season, self.current_episode, self.current_frame = self.get_random_frame()
+        self.prev_frames.append(f"{self.current_season}{self.current_episode} - {self.current_frame}")
         if len(self.all_frames) == 0:
             for root, _, files in os.walk(self.dir_path):
                 for name in files:
                     self.all_frames.append(os.path.join(root, name))
         for frame in self.all_frames:
-            if f"{rand_season}{rand_episode} - {rand_frame}" in frame:
+            if f"{self.current_season}{self.current_episode} - {self.current_frame}" in frame:
                 self.img = Image.open(frame)
                 exit
         self.controller.img = self.img
         self.controller.resize_image()
-        self.current_season = rand_season
-        self.current_episode = rand_episode
-        self.current_frame = rand_frame
-        self.current_frame_time = frame_data["Frames"][rand_season][rand_episode][rand_frame]["time"]
-        time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
-        # TODO not gonna leave this, just for testing
-        self.image_info_label['text'] = f"{rand_season}{rand_episode} - {time}"
+        self.current_frame_time = self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["time"]
+        self.image_info_label['text'] = f"What episode is this frame from?"
 
 
     def on_search(self, event):
         query = self.search_bar.get()
         result = [] 
         if len(query) > 3:
-            regex_search = re.search(r"([Ss]\d?[1-9])([Ee]\d?[1-9])", query)
+            regex_search = re.search(r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)", query)
             if regex_search:
                 season_no = regex_search.group(1)
                 episode_no = regex_search.group(2)
@@ -274,8 +316,9 @@ class main_screen(tk.Frame):
             # Fuzzy Time??
             for r in process.extract(query, self.title_map):
                 result.append([r[2], r[1]])
-            for r in process.extract(query, self.synopsis_map, limit=10):
-                result.append([r[2], r[1]])
+            if self.syn == 1:
+                for r in process.extract(query, self.synopsis_map, limit=10):
+                    result.append([r[2], r[1]])
             # Displaying
             result.sort(key=lambda x: x[1], reverse=True)
             results = []
@@ -286,7 +329,10 @@ class main_screen(tk.Frame):
             menus_list = list(self.menus.keys())
             for i in range(len(menus_list)):
                 self.menus[menus_list[i]].pack(fill='x')
-                menu_text = f"{results[i]} : {self.all_ep_data[results[i]]['title']}\n{self.all_ep_data[results[i]]['synopsis']}"
+                if self.syn == 1:
+                    menu_text = f"{results[i]} : {self.all_ep_data[results[i]]['title']}\n{self.all_ep_data[results[i]]['synopsis']}"
+                else:
+                    menu_text = f"{results[i]} : {self.all_ep_data[results[i]]['title']}"
                 self.menus[menus_list[i]].config(text=menu_text, value=results[i])
                 
         else:
@@ -298,17 +344,27 @@ class main_screen(tk.Frame):
     def resize_radios(self, event=None):
         self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
         for menu in self.menus.keys():
-            self.menus[menu].config(wraplength=self.scrollabe_frame_width)
+            self.menus[menu].config(wraplength=self.scrollabe_frame_width-10)
 
 
     def on_submit(self, event=None):
-        if self.search_bar.get() != "":
-            if self.selected_ep.get() == "":
-                print(self.default_ep[0])
-            else:
-                print(self.selected_ep.get())
+        if self.answered:
+            self.new_frame()
+        
+        elif len(self.search_bar.get()) > 3:
+            self.answered = True
+            correct_ep = f"{self.current_season}{self.current_episode}"
+            if self.default_ep[0] == correct_ep or self.selected_ep.get() == correct_ep:
+                self.score += 1
+            
+            time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
+            self.next_button['text'] = "Next"
+            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({self.score/self.num_questions*100:.2f}%)"
+            self.image_info_label['text'] = f"{self.current_season}{self.current_episode}: {self.all_ep_data[f"{self.current_season}{self.current_episode}"]["title"]} - {time}"
             self.search_bar.delete(0, tk.END)
-            #self.new_frame()
+            for menu in self.menus.keys():
+                self.menus[menu].pack_forget()
+                self.selected_ep.set("")
 
 
 class settings_screen(tk.Frame):
@@ -502,6 +558,8 @@ def main():
     # connect resize binding to the main page's canvas
     main_page.search_bar.bind("<KeyRelease>", main_page.on_search)
     main_page.search_bar.bind("<Return>", main_page.on_submit)
+    for key in list(main_page.menus.keys()):
+        main_page.menus[key].bind("<Return>", main_page.on_submit)
     window.image_canvas.bind("<Configure>", window.resize_image)
     main_page.controller.image_canvas.bind("<Configure>", main_page.resize_radios)
     window.mainloop()
