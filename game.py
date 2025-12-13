@@ -22,6 +22,15 @@ class FrameGame(tk.Tk):
         self.x=1/34
         self.game_dir = ""
                 
+        if os.path.exists("./defaults.json"):
+            try:
+                with open("./defaults.json", 'r', encoding='utf-8')as file:
+                    data = json.load(file)
+                    self.game_dir = data["path"]
+                    print(self.game_dir)
+            except:
+                self.game_dir =""
+        
         container = tk.Frame(self)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
@@ -74,7 +83,6 @@ class main_screen(tk.Frame):
         self.x = controller.x
         self.score = -1
         self.dir_path = ""
-        self.dir_path = controller.game_dir
         self.all_frames = []
         self.all_ep_data = {}
         self.title_map = {}
@@ -144,10 +152,13 @@ class main_screen(tk.Frame):
         self.report_button = tk.Button(self, text="Report Frame", bg=self.button_color, command=self.report)
         self.restart_button = tk.Button(self, text="Restart", bg=self.button_color, command=self.restart)
         self.settings_button = tk.Button(self, text="Settings", bg=self.button_color, command=self.settings_page)
-        self.next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=20*self.y)
-        self.report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=22*self.y)
-        self.restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=24*self.y)
-        self.settings_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=26*self.y)
+        self.Leaderboard_button = tk.Button(self, text="Leaderboard", bg=self.button_color)
+        self.next_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=(20+7/4*0)*self.y)
+        self.report_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=(20+7/4*1)*self.y)
+        self.restart_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=(20+7/4*2)*self.y)
+        self.settings_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=(20+7/4*3)*self.y)
+        # TODO Leaderboard stuffs
+        #self.Leaderboard_button.place(relheight=self.y, relwidth=7*self.x, relx=26*self.x, rely=(20+7/4*4)*self.y)
         
         # Image Box:
         self.image_canvas = tk.Canvas(self, bg=self.bg)
@@ -162,6 +173,7 @@ class main_screen(tk.Frame):
         self.controller.show_page(settings_screen)
         self.search_bar.delete(0,tk.END)
         self.search_bar.config(state=tk.DISABLED)
+        self.restart()
     
 
     def update_disabled_widgets(self):
@@ -179,18 +191,13 @@ class main_screen(tk.Frame):
 
     def on_show(self):
         if self.dir_path != self.controller.game_dir and self.controller.game_dir != "":
-            ep_data_file_path = os.path.join(self.controller.game_dir, 'ep-data.json')
-            with open(ep_data_file_path, "r", encoding='utf-8') as file:
-                data = json.load(file)
-                self.all_ep_data = data
-                self.title_map = { ep_id: info["title"] for ep_id, info in data.items() }
-                self.synopsis_map = { ep_id: info["synopsis"] for ep_id, info in data.items() }
-        self.dir_path = self.controller.game_dir
-        
-        self.update_disabled_widgets()
-        if self.dir_path != "":
+            self.dir_path = self.controller.game_dir
+            ep_data_file_path = os.path.join(self.dir_path, 'ep-data.json')
             game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
             frame_data_file_path = os.path.join(self.dir_path, 'data.json')
+            self.img = Image.open(r"./game_images/start_image.jpg")
+            
+            # Settings load
             try:
                 with open(game_data_file_path, "r", encoding='utf-8') as file:
                     data = json.load(file)
@@ -207,23 +214,41 @@ class main_screen(tk.Frame):
                 self.title_bar['text'] = f"FrameGame: {self.title}"
             except:
                 pass
-            self.img = Image.open(r"./game_images/start_image.jpg")
-        else:
+            
+            # Search Maps
+            with open(ep_data_file_path, "r", encoding='utf-8') as file:
+                data = json.load(file)
+                self.all_ep_data = data
+                for key in list(self.all_ep_data.keys()):
+                    if int(re.search(r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)", key).group(1)[1:]) not in self.season_select:
+                        del self.all_ep_data[key]
+                self.title_map = { ep_id: info["title"] for ep_id, info in self.all_ep_data.items() }
+                self.synopsis_map = { ep_id: info["synopsis"] for ep_id, info in self.all_ep_data.items() }
+ 
+        elif self.controller.game_dir == "":
+            self.dir_path = self.controller.game_dir
             self.img = Image.open(r"./game_images/default_image.jpg")
             self.title_bar['text'] = "FrameGame"
             self.image_info_label['text'] = ""
         self.controller.image_canvas = self.image_canvas
         self.controller.img = self.img
-        self.controller.after(50, self.controller.resize_image)
+        self.controller.after(75, self.controller.resize_image)
         self.resize_radios()
-        
+        self.update_disabled_widgets()
+
 
     def report(self):
-        self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["reports"] += 1
-        with open(os.path.join(self.dir_path, "data.json"), 'w', encoding='utf-8') as file:
-            json.dump(self.frame_data, file, ensure_ascii=False, indent=4)
-        self.num_questions -= 1
-        self.new_frame()
+        if self.report_button['text'] == "Report Frame":
+            self.report_button['text'] = "Click Again to Confirm"
+            
+        else:
+            self.report_button['text'] = "Report Frame"
+            self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["reports"] += 1
+            with open(os.path.join(self.dir_path, "data.json"), 'w', encoding='utf-8') as file:
+                json.dump(self.frame_data, file, ensure_ascii=False, indent=4)
+            self.num_questions -= 1
+            self.answered = True
+            self.new_frame()
 
    
     def update_game_dir(self):
@@ -259,6 +284,8 @@ class main_screen(tk.Frame):
 
 
     def new_frame(self):
+        self.report_button['text'] = "Report Frame"
+        # Removes disallowed frames from pool
         if len(self.frame_data) == 0:
             with open(os.path.join(self.dir_path, "data.json"), 'r', encoding='utf-8') as file:
                 self.frame_data = json.load(file)
@@ -276,29 +303,42 @@ class main_screen(tk.Frame):
                             
                     if len(self.allowed_frames["Frames"][s].keys()) == 0:
                         del self.allowed_frames["Frames"][s]
-                        
-        self.next_button['text'] = "Skip"
-        if self.num_questions == 0:
-            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({100.00:.2f}%)"
-        else:
-            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({self.score/self.num_questions*100:.2f}%)"
-        self.num_questions += 1
-        self.answered = False
         
-        self.current_season, self.current_episode, self.current_frame = self.get_random_frame()
-        self.prev_frames.append(f"{self.current_season}{self.current_episode} - {self.current_frame}")
-        if len(self.all_frames) == 0:
-            for root, _, files in os.walk(self.dir_path):
-                for name in files:
-                    self.all_frames.append(os.path.join(root, name))
-        for frame in self.all_frames:
-            if f"{self.current_season}{self.current_episode} - {self.current_frame}" in frame:
-                self.img = Image.open(frame)
-                exit
-        self.controller.img = self.img
-        self.controller.resize_image()
-        self.current_frame_time = self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["time"]
-        self.image_info_label['text'] = f"What episode is this frame from?"
+        if not self.answered and self.num_questions != 0: 
+            self.answered = True      
+            self.image_canvas.config(highlightbackground="red", highlightcolor="red")     
+            time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
+            self.next_button['text'] = "Next"
+            self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({self.score/self.num_questions*100:.2f}%)"
+            self.image_info_label['text'] = f"{self.current_season}{self.current_episode}: {self.all_ep_data[f"{self.current_season}{self.current_episode}"]["title"]} - {time}"
+            self.search_bar.delete(0, tk.END)
+            for menu in self.menus.keys():
+                self.menus[menu].pack_forget()
+                self.selected_ep.set("")
+        else:
+            self.image_canvas.config(highlightbackground="white", highlightcolor="white")
+            self.next_button['text'] = "Skip"
+            if self.num_questions == 0:
+                self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({100.00:.2f}%)"
+            else:
+                self.score_label['text'] = f"Score: {self.score} / {self.num_questions} ({self.score/self.num_questions*100:.2f}%)"
+            self.num_questions += 1
+            self.answered = False
+            
+            self.current_season, self.current_episode, self.current_frame = self.get_random_frame()
+            self.prev_frames.append(f"{self.current_season}{self.current_episode} - {self.current_frame}")
+            if len(self.all_frames) == 0:
+                for root, _, files in os.walk(self.dir_path):
+                    for name in files:
+                        self.all_frames.append(os.path.join(root, name))
+            for frame in self.all_frames:
+                if f"{self.current_season}{self.current_episode} - {self.current_frame}" in frame:
+                    self.img = Image.open(frame)
+                    exit
+            self.controller.img = self.img
+            self.controller.resize_image()
+            self.current_frame_time = self.frame_data["Frames"][self.current_season][self.current_episode][self.current_frame]["time"]
+            self.image_info_label['text'] = f"What episode is this frame from?"
 
 
     def on_search(self, event):
@@ -356,6 +396,10 @@ class main_screen(tk.Frame):
             correct_ep = f"{self.current_season}{self.current_episode}"
             if self.default_ep[0] == correct_ep or self.selected_ep.get() == correct_ep:
                 self.score += 1
+                self.image_canvas.config(highlightbackground="#00FF00", highlightcolor="#00FF00")
+            else:
+                self.image_canvas.config(highlightbackground="red", highlightcolor="red")
+
             
             time = f"{self.current_frame_time//3600:02}:{(self.current_frame_time%3600)//60:02}:{self.current_frame_time%60:02}"
             self.next_button['text'] = "Next"
@@ -374,7 +418,7 @@ class settings_screen(tk.Frame):
         self.y = controller.y
         self.x = controller.x
         self.controller = controller
-        self.data_dir = ""
+        self.data_dir = controller.game_dir
         super().__init__(parent, bg=self.bg)
 
         # Title bar:
@@ -427,6 +471,16 @@ class settings_screen(tk.Frame):
         self.controller.game_dir = self.data_dir
 
 
+    def on_show(self):
+        self.data_dir = self.controller.game_dir
+        self.file_button["text"] = self.data_dir
+        self.update_disabled_widgets()
+        if os.path.exists(os.path.join(self.data_dir, "game-data.json")):
+            self.import_settings(os.path.join(self.data_dir, "game-data.json"))
+        else:
+            self.default_settings(os.path.join(self.data_dir))
+        
+        
     def change_file(self):
         self.data_dir = fd.askdirectory(title="Choose Game Data Directory", mustexist=True)
         if not os.path.exists(os.path.join(self.data_dir, "data.json")):
@@ -445,6 +499,9 @@ class settings_screen(tk.Frame):
             self.import_settings(os.path.join(self.data_dir, "game-data.json"))
         else:
             self.default_settings(os.path.join(self.data_dir))
+        with open("./defaults.json", 'w', encoding='utf-8') as file:
+            data = {"path":self.data_dir}
+            json.dump(data, file, ensure_ascii=False, indent=4)
 
 
     def update_disabled_widgets(self):

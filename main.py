@@ -176,7 +176,7 @@ def run_files(file_path:str, save_path:str, frame_timing:bool=False, fps:float=1
             times = frame_times(frame_timing, length, fps)
             try:
                 # Extracts frames and then writes data to data file.
-                extract_frames(file, save_path, times)
+                extract_frames(file, os.path.join(save_path, "frames"), times)
                 write_data(data_file_path, item, times)
             except Exception:
                 print("Failed, moving to next file.")
@@ -239,14 +239,14 @@ def main():
     
     # Will create the ep data file and use api if not already present
     if (not os.path.isfile(os.path.join(output_dir, "ep-data.json"))) or (ep_override):
-        print("\nFetching Episode Data")
-        with open(os.path.join(output_dir, "ep-data.json"), "w", encoding='utf-8') as file:
-            json.dump(get_all_synopses(title, API_KEY), file, ensure_ascii=False, indent=4) 
-        print("Episode Data Saved - Recommended to check for missing data")
-        file.close()
+        if (get_response("Do you want to run api? (y/n): ", ["y", "n"], [True, False])):
+            print("\nFetching Episode Data")
+            with open(os.path.join(output_dir, "ep-data.json"), "w", encoding='utf-8') as file:
+                json.dump(get_all_synopses(title, API_KEY), file, ensure_ascii=False, indent=4) 
+            print("Episode Data Saved - Recommended to check for missing data")
     
     # Will copy the file structure from the input directory to the output directory
-    copytree(input_dir, output_dir, dirs_exist_ok=True, ignore=ignore_files)
+    copytree(input_dir, os.path.join(output_dir, "frames"), dirs_exist_ok=True, ignore=ignore_files)
     
     # Double checks if you want to extract the frames 
     if get_response("\nDo you want to run the files, can take a long time! (yes/no): ", ["yes","no"], [True, False]):
