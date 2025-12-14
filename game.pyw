@@ -760,7 +760,7 @@ def main():
     main_page.search_bar.bind("<Return>", main_page.on_submit)
     for key in list(main_page.menus.keys()):
         main_page.menus[key].bind("<Return>", main_page.on_submit)
-    window.image_canvas.bind("<Configure>", window.resize_image)
+    # window.image_canvas.bind("<Configure>", window.resize_image)
     main_page.controller.image_canvas.bind(
         "<Configure>", main_page.resize_radios)
     window.mainloop()
