@@ -1,12 +1,12 @@
 import tkinter as tk
-# from tkinter import filedialog as fd
+from tkinter import filedialog as fd
 # from PIL import ImageTk, Image
 import json
 import os
 # import random
 # from fuzzywuzzy import process
 import re
-# import copy
+import copy
 
 
 class FrameGame(tk.Tk):
@@ -24,9 +24,8 @@ class FrameGame(tk.Tk):
             "x-mod": 1/34,
 
             # Static file variables
-            "frame-data-file-name": "frame-data.json",
+            "data-file-name": "data.json",
             "ep-data-file-name": "ep-data.json",
-            "game-data-file-name": "game-data.json",
             "defaults-file": "defaults.json",
 
             # Display variables
@@ -45,15 +44,18 @@ class FrameGame(tk.Tk):
 
             # Settings Variables
             "game-dir": "",
-            "frame-data-file": "",
+            "data-file": "",
             "ep-data-file": "",
+
             "synopsis-map": {},
             "title-map": {},
-            "game-data-file": "",
+
             "game-title": "",
+
             "allowed-seasons": [],
             "synopsis-search": True,
             "report-threshold": 1,
+
             "leaderboard": {}
         }
 
@@ -99,7 +101,10 @@ class main_screen(tk.Frame):
 
     def on_show(self):
         """Runs when the page is shown"""
-
+        # Sets defaults for gameplay when returning from other screens
+        self.next_button['text'] = "Start"
+        self.search_bar.delete(0, tk.END)
+        # ---
         self.update_widgets()
 
     def draw_widgets(self):
@@ -231,7 +236,15 @@ class main_screen(tk.Frame):
 
     def next_skip(self):
         """Will start game, prepare for new frame, or skip frame"""
-        pass
+        if self.next_button["text"] == "Start":
+            self.next_button["text"] = "Skip"
+            # TODO Loads frame and stuff
+        elif self.next_button["text"] == "Next":
+            self.next_button["text"] = "Skip"
+        elif self.next_button["text"] == "Skip":
+            self.next_button["text"] = "Next"
+        else:
+            print("idk how you got here...")
 
     def new_frame(self):
         """Updates the current image with a new one"""
@@ -239,9 +252,7 @@ class main_screen(tk.Frame):
 
     def settings_page(self):
         """Switches the page to the settings page"""
-        # self.controller.shared_data = self.shared_data
         self.controller.show_page(settings_screen)
-        pass
 
     def restart(self):
         """Resets score and frame data"""
@@ -253,7 +264,12 @@ class main_screen(tk.Frame):
 
     def leaderboard_page(self):
         """Switches the page to the leaderboard page"""
-        pass
+        # Just using for testing at the moment
+        for x in self.shared_data.keys():
+            if not isinstance(self.shared_data[x], dict):
+                print(f"{x}: {self.shared_data[x]}")
+            else:
+                print("was a dict", x)
 
     def on_search(self):
         """Displays information based on text input"""
@@ -284,6 +300,12 @@ class main_screen(tk.Frame):
             self.leaderboard_button.config(state=tk.NORMAL)
             self.search_bar.config(state=tk.NORMAL)
 
+        if self.shared_data["game-title"] != "":
+            self.title_bar["text"] = (
+                f"FrameGame: {self.shared_data["game-title"]}")
+        else:
+            self.title_bar["text"] = "FrameGame"
+
 
 class settings_screen(tk.Frame):
     """Class for settings_screen of FrameGame"""
@@ -294,12 +316,11 @@ class settings_screen(tk.Frame):
         super().__init__(parent, bg=controller.shared_data["bg-color"])
         self.shared_data = controller.shared_data
         self.controller = controller
-        self.update_settings()
+        self.get_prev_session()
         self.draw_widgets()
 
     def on_show(self):
         """Runs when the page is shown"""
-
         self.update_widgets()
 
     def draw_widgets(self):
@@ -348,7 +369,7 @@ class settings_screen(tk.Frame):
 
         # File Button
         self.file_button = tk.Button(self, anchor='w',
-                                     text=self.shared_data["game-dir"],
+                                     text="",
                                      bg=self.shared_data["bt-color"],
                                      command=self.change_file)
         self.file_button.place(relheight=1*self.shared_data["y-mod"],
@@ -375,7 +396,7 @@ class settings_screen(tk.Frame):
 
         self.season_entry_label = tk.Label(self, anchor='w',
                                            bg=self.shared_data["bg-color"],
-                                           text="Must be in '1, 2, 5' format")
+                                           text="Must be in '1 2 5' format")
         self.season_entry_label.place(relheight=1*self.shared_data["y-mod"],
                                       relwidth=23*self.shared_data["x-mod"],
                                       relx=10*self.shared_data["x-mod"],
@@ -435,36 +456,29 @@ class settings_screen(tk.Frame):
                                   relx=12*self.shared_data["x-mod"],
                                   rely=27*self.shared_data["y-mod"])
 
-    def update_settings(self):
-        """Updates the settings"""
+    def get_prev_session(self):
+        """Loads the most recent game in"""
 
+        # Checks if file exists and reads it.
         if self.shared_data["game-dir"] == "":
             if os.path.exists(self.shared_data["defaults-file"]):
-                try:
-                    with open(self.shared_data["defaults-file"], 'r') as file:
+                with open(self.shared_data["defaults-file"], 'r') as file:
+                    try:
                         data = json.load(file)
                         self.shared_data["game-dir"] = data["path"]
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
+        # Updates things
+        self.update_settings()
+        self.reset_data()
+
+    def reset_data(self):
+        """Resets the Settings Variables to the Data File Settings"""
+
+        # Will reset settings with value in all-data
         if self.shared_data["game-dir"] != "":
-
-            # Main data file
-            self.shared_data["frame-data-file"] = os.path.join(
-                self.shared_data["game-dir"],
-                self.shared_data["frame-data-file-name"])
-            with open(self.shared_data["frame-data-file"], 'r') as file:
-                self.shared_data["all-data"] = json.load(file)
-
-            # Synopsis data
-            self.shared_data["ep-data-file"] = os.path.join(
-                self.shared_data["game-dir"],
-                self.shared_data["ep-data-file-name"])
-            with open(self.shared_data["ep-data-file"], 'r') as file:
-                self.shared_data["all-ep-data"] = json.load(file)
-
-            # Settings change
-            self.shared_data["synopis-search"] = (
+            self.shared_data["synopsis-search"] = (
                 self.shared_data["all-data"]["Settings"]["Synopsis"])
 
             self.shared_data["report-threshold"] = (
@@ -473,29 +487,76 @@ class settings_screen(tk.Frame):
             self.shared_data["allowed-seasons"] = (
                 self.shared_data["all-data"]["Settings"]["Seasons"])
 
+    def update_settings(self):
+        """Updates the settings"""
+
+        if self.shared_data["game-dir"] != "":
+            # Main data file
+            self.shared_data["data-file"] = os.path.join(
+                self.shared_data["game-dir"],
+                self.shared_data["data-file-name"])
+            with open(self.shared_data["data-file"], 'r') as file:
+                self.shared_data["all-data"] = json.load(file)
+
+            # Title
+            self.shared_data["game-title"] = (
+                self.shared_data["all-data"]["Settings"]["Title"])
+
+            # Synopsis data
+            self.shared_data["ep-data-file"] = os.path.join(
+                self.shared_data["game-dir"],
+                self.shared_data["ep-data-file-name"])
+            with open(self.shared_data["ep-data-file"], 'r') as file:
+                self.shared_data["all-ep-info"] = json.load(file)
+
             # Ep data slicing
             regex = r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)"
-            for key in list(self.shared_data["all-ep-data"].keys()):
+            for key in list(self.shared_data["all-ep-info"].keys()):
                 if int(re.search(regex, key).group(1)[1:]) not in (
                         self.shared_data["allowed-seasons"]):
-                    del self.shared_data["all-ep-data"][key]
+                    del self.shared_data["all-ep-info"][key]
 
             # Title map
             self.shared_data["title-map"] = {ep_id: info["title"]
                                              for ep_id, info
                                              in self.shared_data
-                                             ["all-ep-data"].items()}
+                                             ["all-ep-info"].items()}
 
             # Syn map
             self.shared_data["synopsis-map"] = {ep_id: info["synopsis"]
                                                 for ep_id, info
                                                 in self.shared_data
-                                                ["all-ep-data"].items()}
+                                                ["all-ep-info"].items()}
+
+            # Frame data copy
+            self.shared_data["allowed-frames"] = (
+                copy.deepcopy(self.shared_data["all-data"]["Frames"]))
+
+            # Temp allowed-frames for smaller var len
+            allowed_frames = self.shared_data["allowed-frames"]
+
+            # Removes seasons from allowed frames
+            for s in list(allowed_frames.keys()):
+                if int(s[1:]) not in self.shared_data["allowed-seasons"]:
+                    del allowed_frames[s]
+
+            # Removes frames from allowed frames based on reports
+            for s in list(allowed_frames.keys()):
+                for e in list(
+                        allowed_frames[s].keys()):
+                    for f in list(allowed_frames[s][e].keys()):
+                        if (allowed_frames[s][e][f]['reports'] >=
+                                self.shared_data["report-threshold"]):
+                            del allowed_frames[s][e][f]
+                    if (len(allowed_frames[s][e].keys()) == 0):
+                        del allowed_frames[s][e]
+                if len(allowed_frames[s].keys()) == 0:
+                    del allowed_frames[s]
 
     def update_widgets(self):
-        """
-        Enables or Disables Widgets
-        """
+        """Updates widget configs"""
+
+        # Enables or disabled widgets
         if self.shared_data["game-dir"] == "":
             self.season_entry.config(state=tk.DISABLED)
             self.synopsis_radio_yes.config(state=tk.DISABLED)
@@ -511,21 +572,112 @@ class settings_screen(tk.Frame):
             self.save_button.config(state=tk.NORMAL)
             self.default_button.config(state=tk.NORMAL)
 
+        # Updates the widgets to reflect settings
+        self.file_button['text'] = self.shared_data["game-dir"]
+        self.season_entry.delete(0, tk.END)
+        self.season_entry.insert(0, self.shared_data["allowed-seasons"])
+        self.report_entry.delete(0, tk.END)
+        self.report_entry.insert(0, self.shared_data["report-threshold"])
+        self.syn.set(self.shared_data["synopsis-search"])
+
     def default_settings(self):
         """Generates default settings from data file"""
-        pass
+
+        # Game title
+        self.shared_data["game-title"] = (
+            self.shared_data["all-data"]["Settings"]["Title"])
+
+        # Allowed seasons
+        self.shared_data["allowed-seasons"].clear()
+        for s in self.shared_data["all-data"]["Frames"].keys():
+            self.shared_data["allowed-seasons"].append(int(s[1:]))
+
+        # Synopsis and Report settings
+        self.shared_data["synopsis-search"] = True
+        self.shared_data["report-threshold"] = 1
+
+        self.update_widgets()
 
     def to_main_screen(self):
         """Switches screen to main screen"""
-        pass
+        self.reset_data()
+        self.controller.show_page(main_screen)
 
     def save_settings(self):
         """Saves new settings to file"""
-        pass
+
+        # Allowed season get
+        results = []
+        for s in self.season_entry.get().split(" "):
+            try:
+                results.append(int(s))
+            except Exception:
+                pass
+        list(set(results)).sort()
+        self.shared_data["allowed-seasons"].clear()
+        for s in list(self.shared_data["all-data"]["Frames"].keys()):
+            if int(s[1:]) in results:
+                self.shared_data["allowed-seasons"].append(int(s[1:]))
+        if len(self.shared_data["allowed-seasons"]) == 0:
+            self.shared_data["allowed-seasons"].clear()
+            for s in self.shared_data["all-data"]["Frames"].keys():
+                self.shared_data["allowed-seasons"].append(int(s[1:]))
+
+        # Synopsis get
+        self.shared_data["synopsis-search"] = self.syn.get()
+
+        # Report get
+        try:
+            if int(self.report_entry.get()) >= 0:
+                self.shared_data["report-threshold"] = (
+                    int(self.report_entry.get()))
+        except Exception:
+            self.shared_data["report-threshold"] = 1
+
+        # Applies settings to game variables
+        self.shared_data["all-data"]["Settings"].update({
+            "Seasons": self.shared_data["allowed-seasons"],
+            "Synopsis": self.shared_data["synopsis-search"],
+            "Report": self.shared_data["report-threshold"]})
+
+        # Writes the data
+        with open(self.shared_data["data-file"], 'w') as file:
+            json.dump(self.shared_data["all-data"], file,
+                      ensure_ascii=False, indent=4)
+
+        # Updates default loadout file
+        with open(self.shared_data["defaults-file"],
+                  'w', encoding='utf-8') as file:
+            data = {"path": self.shared_data["game-dir"]}
+            json.dump(data, file, ensure_ascii=False, indent=4)
+
+        # Gets all the data files prepared and updates widgets
+        self.update_settings()
+        self.update_widgets()
 
     def change_file(self):
         """Updates the current game file"""
-        pass
+
+        # Gets new directory
+        self.shared_data["game-dir"] = fd.askdirectory(
+            title="Choose Game Data Directory", mustexist=True)
+        self.shared_data["data-file"] = os.path.join(
+            self.shared_data["game-dir"],
+            self.shared_data["data-file-name"])
+
+        # Ensures dir has data file and correct values
+        if os.path.exists(self.shared_data["data-file"]):
+            with open(self.shared_data["data-file"], 'r') as file:
+                self.shared_data["all-data"] = json.load(file)
+            self.shared_data["all-data"]["Settings"].update({
+                "Seasons": [], "Synopsis": True, "Report": 1})
+            self.default_settings()
+        else:
+            self.shared_data["game-dir"] = ""
+
+        # Runs updates
+        self.save_settings()
+        self.update_widgets()
 
 
 class leaderboard_screen(tk.Frame):
@@ -541,7 +693,6 @@ class leaderboard_screen(tk.Frame):
 
     def on_show(self):
         """Runs when the page is shown"""
-        print(self.shared_data["game-dir"])
         pass
 
     def draw_widgets(self):
