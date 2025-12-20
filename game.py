@@ -240,10 +240,10 @@ class main_screen(tk.Frame):
         self.leaderboard_button = tk.Button(self, text="Leaderboard",
                                             bg=self.shared_data["bt-color"],
                                             command=self.leaderboard_page)
-        self.leaderboard_button.place(relheight=self.shared_data["y-mod"],
-                                      relwidth=7*self.shared_data["x-mod"],
-                                      relx=26*self.shared_data["x-mod"],
-                                      rely=(20+7)*self.shared_data["y-mod"])
+        # self.leaderboard_button.place(relheight=self.shared_data["y-mod"],
+        #                               relwidth=7*self.shared_data["x-mod"],
+        #                               relx=26*self.shared_data["x-mod"],
+        #                               rely=(20+7)*self.shared_data["y-mod"])
 
         # Image Box
         self.image_canvas = tk.Canvas(self, bg=self.shared_data["bg-color"])
@@ -372,10 +372,10 @@ class main_screen(tk.Frame):
             # Updates data
             rep_t = self.shared_data["report-threshold"]
             if rep_t == -1:
-                (self.shared_data["all-data"]["Frames"][self.current_s]
+                (self.shared_data["all-data"]["frames"][self.current_s]
                     [self.current_e][self.current_f]["reports"]) = 0
             else:
-                (self.shared_data["all-data"]["Frames"][self.current_s]
+                (self.shared_data["all-data"]["frames"][self.current_s]
                     [self.current_e][self.current_f]["reports"]) += 1
             # Writes to file
             with open(self.shared_data["data-file"], "w") as file:
@@ -721,13 +721,13 @@ class settings_screen(tk.Frame):
         # Will reset settings with value in all-data
         if self.shared_data["game-dir"] != "":
             self.shared_data["synopsis-search"] = (
-                self.shared_data["all-data"]["Settings"]["Synopsis"])
+                self.shared_data["all-data"]["settings"]["synopsis"])
 
             self.shared_data["report-threshold"] = (
-                self.shared_data["all-data"]["Settings"]["Report"])
+                self.shared_data["all-data"]["settings"]["report"])
 
             self.shared_data["allowed-seasons"] = (
-                self.shared_data["all-data"]["Settings"]["Seasons"])
+                self.shared_data["all-data"]["settings"]["seasons"])
 
     def update_settings(self):
         """Updates the settings"""
@@ -741,17 +741,17 @@ class settings_screen(tk.Frame):
                 self.shared_data["all-data"] = json.load(file)
 
             self.shared_data["synopsis-search"] = (
-                self.shared_data["all-data"]["Settings"]["Synopsis"])
+                self.shared_data["all-data"]["settings"]["synopsis"])
 
             self.shared_data["report-threshold"] = (
-                self.shared_data["all-data"]["Settings"]["Report"])
+                self.shared_data["all-data"]["settings"]["report"])
 
             self.shared_data["allowed-seasons"] = (
-                self.shared_data["all-data"]["Settings"]["Seasons"])
+                self.shared_data["all-data"]["settings"]["seasons"])
 
             # Title
             self.shared_data["game-title"] = (
-                self.shared_data["all-data"]["Settings"]["Title"])
+                self.shared_data["all-data"]["settings"]["title"])
 
             # Synopsis data
             self.shared_data["ep-data-file"] = os.path.join(
@@ -788,7 +788,7 @@ class settings_screen(tk.Frame):
 
             # Frame data copy
             self.shared_data["allowed-frames"] = (
-                copy.deepcopy(self.shared_data["all-data"]["Frames"]))
+                copy.deepcopy(self.shared_data["all-data"]["frames"]))
 
             # Temp allowed-frames for smaller var len
             allowed_frames = self.shared_data["allowed-frames"]
@@ -847,11 +847,11 @@ class settings_screen(tk.Frame):
 
         # Game title
         self.shared_data["game-title"] = (
-            self.shared_data["all-data"]["Settings"]["Title"])
+            self.shared_data["all-data"]["settings"]["title"])
 
         # Allowed seasons
         self.shared_data["allowed-seasons"].clear()
-        for s in self.shared_data["all-data"]["Frames"].keys():
+        for s in self.shared_data["all-data"]["frames"].keys():
             self.shared_data["allowed-seasons"].append(int(s[1:]))
 
         # Synopsis and Report settings
@@ -863,6 +863,7 @@ class settings_screen(tk.Frame):
     def to_main_screen(self):
         """Switches screen to main screen"""
         self.reset_data()
+        self.update_settings()
         self.controller.show_page(main_screen)
 
     def save_settings(self):
@@ -879,12 +880,12 @@ class settings_screen(tk.Frame):
                 pass
         list(set(results)).sort()
         self.shared_data["allowed-seasons"].clear()
-        for s in list(self.shared_data["all-data"]["Frames"].keys()):
+        for s in list(self.shared_data["all-data"]["frames"].keys()):
             if int(s[1:]) in results:
                 self.shared_data["allowed-seasons"].append(int(s[1:]))
         if len(self.shared_data["allowed-seasons"]) == 0:
             self.shared_data["allowed-seasons"].clear()
-            for s in self.shared_data["all-data"]["Frames"].keys():
+            for s in self.shared_data["all-data"]["frames"].keys():
                 self.shared_data["allowed-seasons"].append(int(s[1:]))
 
         # Synopsis get
@@ -899,10 +900,10 @@ class settings_screen(tk.Frame):
             self.shared_data["report-threshold"] = 1
 
         # Applies settings to game variables
-        self.shared_data["all-data"]["Settings"].update({
-            "Seasons": self.shared_data["allowed-seasons"],
-            "Synopsis": self.shared_data["synopsis-search"],
-            "Report": self.shared_data["report-threshold"]})
+        self.shared_data["all-data"]["settings"].update({
+            "seasons": self.shared_data["allowed-seasons"],
+            "synopsis": self.shared_data["synopsis-search"],
+            "report": self.shared_data["report-threshold"]})
 
         # Writes the data
         with open(self.shared_data["data-file"], "w") as file:
@@ -934,8 +935,8 @@ class settings_screen(tk.Frame):
                 self.shared_data["game-dir"] != ""):
             with open(self.shared_data["data-file"], "r") as file:
                 self.shared_data["all-data"] = json.load(file)
-            self.shared_data["all-data"]["Settings"].update({
-                "Seasons": [], "Synopsis": True, "Report": 1})
+            self.shared_data["all-data"]["settings"].update({
+                "seasons": [], "synopsis": True, "report": 1})
             self.default_settings()
         else:
             self.shared_data["game-dir"] = ""
