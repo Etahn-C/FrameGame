@@ -10,35 +10,72 @@ import copy
 
 
 class FrameGame(tk.Tk):
+    """Class for Framegame"""
+
     def __init__(self):
         super().__init__()
+
+        # All the data so it can be shared between all pages.
+        self.shared_data = {
+            # Static display variables
+            "bg-color": "#808080",
+            "bt-color": "#A0A0A0",
+            "y-mod": 1/29,
+            "x-mod": 1/34,
+
+            # Static file variables
+            "data-file-name": "data.json",
+            "ep-data-file-name": "ep-data.json",
+            "defaults-file": "defaults.json",
+            "default-image": "./game-images/default-image.jpg",
+            "start-image": "./game-images/start-image.jpg",
+
+            # Display variables
+            "sc-width": 680,
+            "sc-height": 580,
+
+            # Gameplay variables
+            "score": 0,
+            "question-num": 0,
+            "answered": False,
+
+            # Data Variables
+            "all-data": {},
+            "all-ep-info": {},
+            "all-frame-paths": [],
+            "allowed-frames": {},
+
+            # Settings Variables
+            "game-dir": "",
+            "data-file": "",
+            "ep-data-file": "",
+
+            "synopsis-map": {},
+            "title-map": {},
+
+            "game-title": "",
+
+            "allowed-seasons": [],
+            "synopsis-search": True,
+            "report-threshold": 1,
+
+            "leaderboard": {}
+        }
+
+        # Sets up the screen.
         self.title("FrameGame!")
-        self.geometry("680x580")
-        self.config(background="#808080")
-        self.width = 680
-        self.bg = "#808080"
-        self.button_color = "#A0A0A0"
-        self.y = 1/29
-        self.x = 1/34
-        self.game_dir = ""
+        self.geometry(
+            f"{self.shared_data["sc-width"]}x{self.shared_data["sc-height"]}")
+        self.configure(background=self.shared_data["bg-color"])
 
-        if os.path.exists("./defaults.json"):
-            try:
-                with open("./defaults.json", 'r', encoding='utf-8')as file:
-                    data = json.load(file)
-                    self.game_dir = data["path"]
-                    print(self.game_dir)
-            except Exception:
-                self.game_dir = ""
-
+        # Creates container to hold all the frames on the screen.
         container = tk.Frame(self)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
-
         container.pack(fill="both", expand=True)
-        self.pages = {}
 
-        for Page in (main_screen, settings_screen):
+        self.pages = {}
+        for Page in (main_screen, settings_screen, leaderboard_screen):
             page = Page(container, self)
             self.pages[Page] = page
             page.grid(row=0, column=0, sticky="nsew")
@@ -49,720 +86,890 @@ class FrameGame(tk.Tk):
         """Bring a page to the front."""
         page = self.pages[page_class]
         page.tkraise()
-
+        # Will run on_show() if it exists for the page
         if hasattr(page, "on_show"):
             page.on_show()
 
-    def resize_image(self, event=None):
-        canvas_w = self.image_canvas.winfo_width()
-        self.width = canvas_w
-        canvas_h = self.image_canvas.winfo_height()
-        if canvas_w < 5 or canvas_h < 5:
-            return
-        # resize keeping aspect ratio
-        resized = self.img.copy()
-        resized.thumbnail((canvas_w, canvas_h))
-        # convert to PhotoImage
-        tk_img = ImageTk.PhotoImage(resized)
-        # save reference so it doesn't get garbage-collected
-        self.image_canvas.img = tk_img
-        # clear old image
-        self.image_canvas.delete("all")
-        # center the image
-        self.image_canvas.create_image(
-            canvas_w/2, canvas_h/2, anchor="center", image=tk_img)
-
 
 class main_screen(tk.Frame):
+    """Class for main_screen of FrameGame"""
+
     def __init__(self, parent, controller):
+        """Initializes the screen"""
+
+        super().__init__(parent, bg=controller.shared_data["bg-color"])
+        self.shared_data = controller.shared_data
         self.controller = controller
-        self.bg = controller.bg
-        self.button_color = controller.button_color
-        self.y = controller.y
-        self.x = controller.x
-        self.score = -1
-        self.dir_path = ""
-        self.all_frames = []
-        self.all_ep_data = {}
-        self.title_map = {}
-        self.synopsis_map = {}
-        self.frame_data = {}
-        self.allowed_frames = {}
-        self.answered = False
-        self.score = 0
-        self.num_questions = 0
-        self.prev_frames = []
+        self.img = Image.open(self.shared_data["default-image"])
+        self.tk_img = ImageTk.PhotoImage(self.img)
+        # Game vars
+        self.current_s = "S01"
+        self.current_e = "E01"
+        self.current_f = "F001"
+        self.current_ft = 0
+        # ---
+        self.draw_widgets()
+        self.bindings()
+        self.after(0, self.resize_widgets)
 
-        super().__init__(parent, bg=self.bg)
-        # Title bar:
-        self.title_bar = tk.Label(self, text="Frame Game", bg=self.bg)
-        self.title_bar.place(relheight=self.y, relwidth=28 *
-                             self.x, relx=3*self.x, rely=self.y*0)
+    def on_show(self):
+        """Runs when the page is shown"""
+        # Sets defaults for gameplay when returning from other screens
+        self.next_button["text"] = "Start"
+        self.search_bar.delete(0, tk.END)
+        for i in range(len(self.menus)):
+            self.menus[i]["text"] = ""
+            self.menus[i]["value"] = ""
+        # ---
+        self.restart()
+        self.update_widgets()
+        self.resize_widgets()
 
-        # Image Info:
-        self.image_info_label = tk.Label(self, bg=self.bg, text="")
-        self.image_info_label.place(
-            relheight=self.y, relwidth=24*self.x,
-            relx=1*self.x, rely=19*self.y)
+    def draw_widgets(self):
+        """Draws all the widgets used for the main screen"""
+
+        # Title bar
+        self.title_bar = tk.Label(
+            self, text="Frame Game", bg=self.shared_data["bg-color"])
+        self.title_bar.place(relheight=1*self.shared_data["y-mod"],
+                             relwidth=28*self.shared_data["x-mod"],
+                             relx=3*self.shared_data["x-mod"],
+                             rely=0*self.shared_data["y-mod"])
+
+        # Image Info
+        self.image_info_label = tk.Label(
+            self, bg=self.shared_data["bg-color"])
+        self.image_info_label.place(relheight=1*self.shared_data["y-mod"],
+                                    relwidth=24*self.shared_data["x-mod"],
+                                    relx=1*self.shared_data["x-mod"],
+                                    rely=19*self.shared_data["y-mod"])
 
         # Score Info
-        self.score_label = tk.Label(self, bg=self.bg, text="")
-        self.score_label.place(
-            relheight=self.y, relwidth=7*self.x,
-            relx=26*self.x, rely=19*self.y)
+        self.score_label = tk.Label(self, bg=self.shared_data["bg-color"])
+        self.score_label.place(relheight=1*self.shared_data["y-mod"],
+                               relwidth=7*self.shared_data["x-mod"],
+                               relx=26*self.shared_data["x-mod"],
+                               rely=19*self.shared_data["y-mod"])
 
-        # Search Bar:
-        self.search_bar = tk.Entry(self, bg=self.button_color)
-        self.search_bar.place(relheight=self.y, relwidth=24 *
-                              self.x, relx=self.x, rely=20*self.y)
-        # Search menu container
-        self.search_menu_canvas = tk.Canvas(self, bg=self.bg)
-        self.search_menu_canvas.place(
-            relheight=7*self.y, relwidth=23*self.x,
-            relx=1*self.x, rely=21*self.y)
-
-        self.search_menu_canvas.bind(
-            "<Enter>", lambda e: self.search_menu_canvas.bind_all(
-                "<MouseWheel>", self._on_mousewheel))
-        self.search_menu_canvas.bind(
-            "<Leave>", lambda e:
-                self.search_menu_canvas.unbind_all("<MouseWheel>"))
+        # Search Bar
+        self.search_bar = tk.Entry(self, bg=self.shared_data["bt-color"])
+        self.search_bar.place(relheight=1*self.shared_data["y-mod"],
+                              relwidth=24*self.shared_data["x-mod"],
+                              relx=1*self.shared_data["x-mod"],
+                              rely=20*self.shared_data["y-mod"])
+        # Search Menu Canvas
+        self.search_menu_canvas = tk.Canvas(
+            self, bg=self.shared_data["bg-color"], bd=1)
+        self.search_menu_canvas.place(relheight=7*self.shared_data["y-mod"],
+                                      relwidth=23*self.shared_data["x-mod"],
+                                      relx=1*self.shared_data["x-mod"],
+                                      rely=21*self.shared_data["y-mod"])
 
         # Scrollbar
-        scroll_bar = tk.Scrollbar(
+        self.scroll_bar = tk.Scrollbar(
             self, orient="vertical", command=self.search_menu_canvas.yview)
-        scroll_bar.place(relheight=7*self.y, relwidth=1 *
-                         self.x, relx=24*self.x, rely=21*self.y)
+        self.scroll_bar.place(relheight=7*self.shared_data["y-mod"],
+                              relwidth=1*self.shared_data["x-mod"],
+                              relx=24*self.shared_data["x-mod"],
+                              rely=21*self.shared_data["y-mod"])
+        self.search_menu_canvas.configure(yscrollcommand=self.scroll_bar.set)
 
-        self.search_menu_canvas.configure(yscrollcommand=scroll_bar.set)
+        # Frame In Search Menu Canvas
+        self.scrollable_frame = tk.Frame(
+            self.search_menu_canvas, bg=self.shared_data["bg-color"])
+        self.scrollable_frame_width = self.scrollable_frame.winfo_width()*.95
 
-        # Frame inside the canvas
-        self.scrollable_frame = tk.Frame(self.search_menu_canvas, bg=self.bg)
-        self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
-
-        # Expand scrollregion when contents change
+        # TODO No clue How the next 7 line do stuffs
         self.scrollable_frame.bind(
-            "<Configure>", lambda e: self.search_menu_canvas.configure(
+            "<Configure>", lambda _: self.search_menu_canvas.configure(
                 scrollregion=self.search_menu_canvas.bbox("all")))
-
-        # Add the frame into the canvas and store window ID
         self.inner_window_id = self.search_menu_canvas.create_window(
             (0, 0), window=self.scrollable_frame, anchor="nw")
-
-        # Make inner frame always stretch full width
         self.search_menu_canvas.bind(
             "<Configure>", lambda e: self.search_menu_canvas.itemconfig(
                 self.inner_window_id, width=e.width))
 
-        # Add the radiobuttons
+        # Radio Buttons
         self.selected_ep = tk.StringVar()
-        self.default_ep = ""
-        self.menu1 = tk.Radiobutton(
-            self.scrollable_frame, text="", value="",
-            variable=self.selected_ep, indicatoron=False,
-            bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
-        self.menu2 = tk.Radiobutton(
-            self.scrollable_frame, text="", value="",
-            variable=self.selected_ep, indicatoron=False,
-            bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
-        self.menu3 = tk.Radiobutton(
-            self.scrollable_frame, text="", value="",
-            variable=self.selected_ep, indicatoron=False,
-            bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
-        self.menu4 = tk.Radiobutton(
-            self.scrollable_frame, text="", value="",
-            variable=self.selected_ep, indicatoron=False,
-            bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
-        self.menu5 = tk.Radiobutton(
-            self.scrollable_frame, text="", value="",
-            variable=self.selected_ep, indicatoron=False,
-            bg=self.button_color, wraplength=int(self.scrollabe_frame_width))
-        self.menus = {"menu_1": self.menu1, "menu_2": self.menu2,
-                      "menu_3": self.menu3, "menu_4": self.menu4,
-                      "menu_5": self.menu5}
+        self.menus = []
+        for _ in range(5):
+            rb = tk.Radiobutton(self.scrollable_frame,
+                                variable=self.selected_ep,
+                                indicatoron=False,
+                                bg=self.shared_data["bt-color"],
+                                wraplength=int(self.scrollable_frame_width))
+            self.menus.append(rb)
 
-        # Game Buttons
-        self.next_button = tk.Button(
-            self, text="Start", bg=self.button_color, command=self.new_frame)
-        self.report_button = tk.Button(
-            self, text="Report Frame", bg=self.button_color,
-            command=self.report)
-        self.restart_button = tk.Button(
-            self, text="Restart", bg=self.button_color,
-            command=self.restart)
-        self.settings_button = tk.Button(
-            self, text="Settings", bg=self.button_color,
-            command=self.settings_page)
-        self.Leaderboard_button = tk.Button(
-            self, text="Leaderboard", bg=self.button_color)
-        self.next_button.place(
-            relheight=self.y, relwidth=7*self.x,
-            relx=26*self.x, rely=(20+7/4*0)*self.y)
-        self.report_button.place(
-            relheight=self.y, relwidth=7*self.x,
-            relx=26*self.x, rely=(20+7/4*1)*self.y)
-        self.restart_button.place(
-            relheight=self.y, relwidth=7*self.x,
-            relx=26*self.x, rely=(20+7/4*2)*self.y)
-        self.settings_button.place(
-            relheight=self.y, relwidth=7*self.x,
-            relx=26*self.x, rely=(20+7/4*3)*self.y)
-        # TODO Leaderboard stuffs
-        # self.Leaderboard_button.place(relheight=self.y, relwidth=7*self.x,
-        # relx=26*self.x, rely=(20+7/4*4)*self.y)
+        # Start Button
+        self.next_button = tk.Button(self, text="Start",
+                                     bg=self.shared_data["bt-color"],
+                                     command=self.next_skip)
+        self.next_button.place(relheight=self.shared_data["y-mod"],
+                               relwidth=7*self.shared_data["x-mod"],
+                               relx=26*self.shared_data["x-mod"],
+                               rely=(20+7/4*0)*self.shared_data["y-mod"])
 
-        # Image Box:
-        self.image_canvas = tk.Canvas(self, bg=self.bg)
-        self.image_canvas.place(relheight=18*self.y,
-                                relwidth=32*self.x, relx=self.x, rely=self.y)
-        self.img = Image.open(r"./game_images/default_image.jpg")
+        # Report Button
+        self.report_button = tk.Button(self, text="Report Frame",
+                                       bg=self.shared_data["bt-color"],
+                                       command=self.report)
+        self.report_button.place(relheight=self.shared_data["y-mod"],
+                                 relwidth=7*self.shared_data["x-mod"],
+                                 relx=26*self.shared_data["x-mod"],
+                                 rely=(20+7/4*1)*self.shared_data["y-mod"])
 
-    def _on_mousewheel(self, event):
-        self.search_menu_canvas.yview_scroll(
-            int(-1 * (event.delta / 120)), "units")
+        # Restart Button
+        self.restart_button = tk.Button(self, text="Restart",
+                                        bg=self.shared_data["bt-color"],
+                                        command=self.restart)
+        self.restart_button.place(relheight=self.shared_data["y-mod"],
+                                  relwidth=7*self.shared_data["x-mod"],
+                                  relx=26*self.shared_data["x-mod"],
+                                  rely=(20+7/4*2)*self.shared_data["y-mod"])
+
+        # Settings Button
+        self.settings_button = tk.Button(self, text="Settings",
+                                         bg=self.shared_data["bt-color"],
+                                         command=self.settings_page)
+        self.settings_button.place(relheight=self.shared_data["y-mod"],
+                                   relwidth=7*self.shared_data["x-mod"],
+                                   relx=26*self.shared_data["x-mod"],
+                                   rely=(20+7/4*3)*self.shared_data["y-mod"])
+
+        # Leaderboard Button
+        self.leaderboard_button = tk.Button(self, text="Leaderboard",
+                                            bg=self.shared_data["bt-color"],
+                                            command=self.leaderboard_page)
+        # self.leaderboard_button.place(relheight=self.shared_data["y-mod"],
+        #                               relwidth=7*self.shared_data["x-mod"],
+        #                               relx=26*self.shared_data["x-mod"],
+        #                               rely=(20+7)*self.shared_data["y-mod"])
+
+        # Image Box
+        self.image_canvas = tk.Canvas(self, bg=self.shared_data["bg-color"])
+        self.image_canvas.place(relheight=18*self.shared_data["y-mod"],
+                                relwidth=32*self.shared_data["x-mod"],
+                                relx=1*self.shared_data["x-mod"],
+                                rely=1*self.shared_data["y-mod"])
+
+    def bindings(self):
+        """Sets tkinter bindings"""
+
+        self.image_canvas.bind("<Configure>", self.resize_widgets)
+        self.search_bar.bind("<KeyRelease>", self.on_search)
+        self.search_bar.bind("<Return>", self.on_submit)
+        for menu in self.menus:
+            menu.bind("<Return>", self.on_submit)
+
+    def next_skip(self):
+        """Will start game, prepare for new frame, or skip frame"""
+
+        # Start / Next Button
+        if (self.next_button["text"] == "Start" or
+                self.next_button["text"] == "Next"):
+            self.next_button["text"] = "Skip"
+
+            # Score label
+            nq = self.shared_data["question-num"]
+            score = self.shared_data["score"]
+            if nq == 0:
+                self.score_label["text"] = (f"Score: {score} / {nq} "
+                                            f"({100.00:.2f}%)")
+            else:
+                self.score_label["text"] = (f"Score: {score} / "
+                                            f"{nq} ({score/nq*100:.2f}%)")
+
+            # Info Label and border reset
+            self.image_info_label["text"] = "What episode is this frame from?"
+            self.image_canvas.config(
+                highlightbackground="white", highlightcolor="white")
+
+            # Updates Question
+            self.shared_data["question-num"] += 1
+            self.new_frame()
+
+        # Skip Button
+        elif self.next_button["text"] == "Skip":
+            self.next_button["text"] = "Next"
+            ft = self.current_ft
+            e = self.current_e
+            s = self.current_s
+            time = f"{ft//3600:02}:{(ft % 3600)//60:02}:{ft % 60:02}"
+            title = self.shared_data["all-ep-info"][f"{s}{e}"]["title"]
+            self.image_info_label["text"] = (f"{s}{e}: {title} - {time}")
+            if not self.shared_data["answered"]:
+                self.image_canvas.config(
+                    highlightbackground="red", highlightcolor="red")
+            self.shared_data["answered"] = False
+        self.update_widgets()
+
+    def new_frame(self):
+        """Updates the current image with a new one"""
+
+        # Season
+        si = random.randrange(
+            0, len(self.shared_data["allowed-frames"].keys()))
+        s = list(self.shared_data["allowed-frames"].keys())[si]
+
+        # Episode
+        ei = random.randrange(
+            0, len(self.shared_data["allowed-frames"][s].keys()))
+        e = list(self.shared_data["allowed-frames"][s].keys())[ei]
+
+        # Frame
+        fi = random.randrange(
+            0, len(self.shared_data["allowed-frames"][s][e].keys()))
+        f = list(self.shared_data["allowed-frames"][s][e].keys())[fi]
+
+        # Time
+        t = self.shared_data["allowed-frames"][s][e][f]["time"]
+
+        # Removes frame from pool
+        del self.shared_data["allowed-frames"][s][e][f]
+
+        # Removes ep or season from pool if empty
+        if len(self.shared_data["allowed-frames"][s][e].keys()) == 0:
+            del self.shared_data["allowed-frames"][s][e]
+        if len(self.shared_data["allowed-frames"][s].keys()) == 0:
+            del self.shared_data["allowed-frames"][s]
+
+        # Updates class variables
+        self.current_s = s
+        self.current_e = e
+        self.current_f = f
+        self.current_ft = t
+
+        # Updats img
+        for frame in self.shared_data["all-frame-paths"]:
+            if f"{s}{e} - {f}" in frame:
+                self.img = Image.open(frame)
+                self.resize_widgets()
+        self.update_widgets()
 
     def settings_page(self):
+        """Switches the page to the settings page"""
         self.controller.show_page(settings_screen)
-        self.search_bar.delete(0, tk.END)
-        self.search_bar.config(state=tk.DISABLED)
-        self.restart()
 
-    def update_disabled_widgets(self):
-        if self.dir_path == "":
+    def restart(self):
+        """Resets score and frame data"""
+        self.next_button["text"] = "Start"
+        self.shared_data["question-num"] = 0
+        self.score_label["text"] = ""
+        self.image_info_label["text"] = ""
+        self.image_canvas.config(
+                highlightbackground="#ffffff", highlightcolor="#ffffff")
+        self.img = Image.open(self.shared_data["start-image"])
+        self.resize_widgets()
+
+    def report(self):
+        """Reports the current frame"""
+        if self.report_button["text"] == "Report Frame":
+            self.report_button["text"] = "Click Again to Confirm"
+            self.report_button["fg"] = "#AA0000"
+            self.after(2000, self.report_reset)
+        elif self.report_button["text"] == "Click Again to Confirm":
+            # Removes question
+            self.shared_data["question-num"] -= 1
+            self.shared_data["answered"] = True
+            # Updates data
+            rep_t = self.shared_data["report-threshold"]
+            if rep_t == -1:
+                (self.shared_data["all-data"]["frames"][self.current_s]
+                    [self.current_e][self.current_f]["reports"]) = 0
+            else:
+                (self.shared_data["all-data"]["frames"][self.current_s]
+                    [self.current_e][self.current_f]["reports"]) += 1
+            # Writes to file
+            with open(self.shared_data["data-file"], "w") as file:
+                json.dump(self.shared_data["all-data"], file,
+                          ensure_ascii=False, indent=4)
+            # Continues
+            self.next_skip()
+            self.report_reset()
+
+    def report_reset(self):
+        """Just used for a reset of report info"""
+        self.report_button["text"] = "Report Frame"
+        self.report_button["fg"] = "black"
+
+    def leaderboard_page(self):
+        """Switches the page to the leaderboard page"""
+        # Just using for testing at the moment
+        for x in self.shared_data.keys():
+            if not isinstance(self.shared_data[x], dict):
+                print(f"{x}: {self.shared_data[x]}")
+            else:
+                print("was a dict", x)
+
+    def on_search(self, event=None):
+        """Displays information based on text input"""
+
+        query = self.search_bar.get()
+        all_results = []
+        if len(query) > 3:
+
+            # Single ep search: s01e20
+            regex_search = (
+                re.search(r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)", query))
+            if regex_search:
+                s_no = regex_search.group(1)
+                e_no = regex_search.group(2)
+                ep = f"S{int(s_no[1:]):02}E{int(e_no[1:]):02}"
+                if ep in list(self.shared_data["all-ep-info"].keys()):
+                    all_results.append([100, ep])
+
+            # Fuzzy search
+            for r in process.extract(query,
+                                     self.shared_data["title-map"],
+                                     limit=10):
+                all_results.append([r[1], r[2]])
+            if self.shared_data["synopsis-search"]:
+                for r in process.extract(query,
+                                         self.shared_data["synopsis-map"],
+                                         limit=10):
+                    all_results.append([r[1], r[2]])
+
+            # Sorts List and remove dupes
+            all_results.sort(reverse=True)
+            results = []
+            for r in all_results:
+                results.append(r[1])
+            results = list(dict.fromkeys(results))
+
+            # Updating radio info
+            self.selected_ep.set(results[0])
+            for i in range(len(self.menus)):
+                title = self.shared_data["all-ep-info"][results[i]]["title"]
+                synopsis = (self.shared_data["all-ep-info"]
+                            [results[i]]["synopsis"])
+                if self.shared_data["synopsis-search"]:
+                    display_text = (f"{results[i]}: {title}\n{synopsis}")
+                else:
+                    display_text = (f"{results[i]}: {title}")
+                self.menus[i]["text"] = display_text
+                self.menus[i]["value"] = results[i]
+        else:
+            self.selected_ep.set("")
+            for i in range(len(self.menus)):
+                self.menus[i]["text"] = ""
+                self.menus[i]["value"] = ""
+        self.update_widgets()
+
+    def on_submit(self, event=None):
+        """Submits current guess and proceeds"""
+        self.search_bar.focus_set()
+        # Checks if answer is correct
+        if self.selected_ep.get() == f"{self.current_s}{self.current_e}":
+            self.shared_data["score"] += 1
+            nq = self.shared_data["question-num"]
+            score = self.shared_data["score"]
+            self.score_label["text"] = (f"Score: {score} / "
+                                        f"{nq} ({score/nq*100:.2f}%)")
+            self.image_canvas.config(
+                highlightbackground="#00ff00", highlightcolor="#00ff00")
+        else:
+            self.image_canvas.config(
+                highlightbackground="red", highlightcolor="red")
+        self.shared_data["answered"] = True
+        self.selected_ep.set("")
+        for i in range(len(self.menus)):
+            self.menus[i]["text"] = ""
+            self.menus[i]["value"] = ""
+        self.search_bar.delete(0, tk.END)
+        self.next_skip()
+        self.update_widgets()
+
+    def resize_widgets(self, event=None):
+        """Resizes the image as well as the radio buttons"""
+
+        self.update_idletasks()
+        # Full widths and heights
+        self.shared_data["sc-width"] = self.controller.winfo_width()
+        self.shared_data["sc-height"] = self.controller.winfo_height()
+
+        # Image edits
+        img_width = self.shared_data["sc-width"]*self.shared_data["x-mod"]*32
+        img_height = self.shared_data["sc-height"]*self.shared_data["y-mod"]*18
+        resized = self.img.copy()
+        resized.thumbnail((img_width, img_height))
+        self.tk_img = ImageTk.PhotoImage(resized)
+        self.image_canvas.delete("all")
+        self.image_canvas.create_image(img_width/2, img_height/2,
+                                       anchor="center", image=self.tk_img)
+
+        # Radio wraplength scale
+        radio_width = (
+            self.shared_data["sc-width"]*self.shared_data["x-mod"]*22*0.95)
+        for menu in self.menus:
+            menu.config(wraplength=radio_width)
+
+        # Radio sizes?
+        new_width = max(0, self.search_menu_canvas.winfo_width()-6)
+        self.search_menu_canvas.itemconfig(
+            self.inner_window_id,
+            width=new_width)
+
+    def update_widgets(self):
+        """Updates widget configs"""
+
+        if self.shared_data["game-dir"] == "":
             self.next_button.config(state=tk.DISABLED)
             self.report_button.config(state=tk.DISABLED)
             self.restart_button.config(state=tk.DISABLED)
+            self.leaderboard_button.config(state=tk.DISABLED)
             self.search_bar.config(state=tk.DISABLED)
         else:
             self.next_button.config(state=tk.NORMAL)
-            self.report_button.config(state=tk.NORMAL)
+            if ("What episode is this frame from?"
+                    in self.image_info_label['text']):
+                self.report_button.config(state=tk.NORMAL)
+            else:
+                self.report_button.config(state=tk.DISABLED)
             self.restart_button.config(state=tk.NORMAL)
+            self.leaderboard_button.config(state=tk.NORMAL)
             self.search_bar.config(state=tk.NORMAL)
 
-    def on_show(self):
-        if (self.dir_path != self.controller.game_dir
-                and self.controller.game_dir != ""):
-            self.dir_path = self.controller.game_dir
-            ep_data_file_path = os.path.join(self.dir_path, 'ep-data.json')
-            game_data_file_path = os.path.join(self.dir_path, 'game-data.json')
-            frame_data_file_path = os.path.join(
-                self.dir_path, 'frame-data.json')
-            self.img = Image.open(r"./game_images/start_image.jpg")
-
-            # Settings load
-            try:
-                with open(game_data_file_path, "r", encoding='utf-8') as file:
-                    data = json.load(file)
-                with open(frame_data_file_path, "r", encoding='utf-8') as file:
-                    frame_data = json.load(file)
-
-                self.title = frame_data["Settings"]["Title"]
-                self.syn = data["Settings"]["Synopsis"]
-                self.reports = data["Settings"]["Report"]
-
-                self.season_select = []
-                for x in data["Settings"]["Seasons"].split(','):
-                    self.season_select.append(int(x))
-                self.title_bar['text'] = f"FrameGame: {self.title}"
-            except Exception:
-                pass
-
-            # Search Maps
-            with open(ep_data_file_path, "r", encoding='utf-8') as file:
-                data = json.load(file)
-                self.all_ep_data = data
-                for key in list(self.all_ep_data.keys()):
-                    if int(re.search(r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)", key)
-                           .group(1)[1:]) not in self.season_select:
-                        del self.all_ep_data[key]
-                self.title_map = {ep_id: info["title"]
-                                  for ep_id, info in self.all_ep_data.items()}
-                self.synopsis_map = {
-                    ep_id: info["synopsis"]for ep_id,
-                    info in self.all_ep_data.items()}
-
-        elif self.controller.game_dir == "":
-            self.dir_path = self.controller.game_dir
-            self.img = Image.open(r"./game_images/default_image.jpg")
-            self.title_bar['text'] = "FrameGame"
-            self.image_info_label['text'] = ""
-        self.controller.image_canvas = self.image_canvas
-        self.controller.img = self.img
-        self.controller.after(75, self.controller.resize_image)
-        self.resize_radios()
-        self.update_disabled_widgets()
-
-    def report(self):
-        if self.report_button['text'] == "Report Frame":
-            self.report_button['text'] = "Click Again to Confirm"
-
+        if self.shared_data["game-title"] != "":
+            self.title_bar["text"] = (
+                f"FrameGame: {self.shared_data["game-title"]}")
         else:
-            self.report_button['text'] = "Report Frame"
-            self.frame_data["Frames"][self.current_season]
-            [self.current_episode][self.current_frame]["reports"] += 1
-            with open(os.path.join(self.dir_path, "frame-data.json"),
-                      'w', encoding='utf-8') as file:
-                json.dump(self.frame_data, file, ensure_ascii=False, indent=4)
-            self.num_questions -= 1
-            self.answered = True
-            self.new_frame()
+            self.title_bar["text"] = "FrameGame"
 
-    def update_game_dir(self):
-        self.controller.game_dir = self.dir_path
-
-    def restart(self):
-        self.answered = False
-        self.score = 0
-        self.num_questions = 0
-        self.img = Image.open(r"./game_images/start_image.jpg")
-        self.controller.img = self.img
-        self.controller.resize_image()
-        self.image_info_label['text'] = ""
-        self.score_label['text'] = ""
-        self.next_button['text'] = "Start"
-        self.allowed_frames = {}
-        self.frame_data = {}
-        self.image_canvas.config(
-            highlightbackground="white", highlightcolor="white")
-
-    def get_random_frame(self):
-        rand_season_index = random.randrange(
-            0, len(self.allowed_frames["Frames"].keys()))
-        rand_season = list(self.allowed_frames["Frames"].keys())[
-            rand_season_index]
-        rand_episode_index = random.randrange(
-            0, len(self.allowed_frames["Frames"][rand_season].keys()))
-        rand_episode = list(self.allowed_frames["Frames"][rand_season].keys())[
-            rand_episode_index]
-        rand_frame_index = random.randrange(
-            0, len(self.allowed_frames["Frames"][rand_season]
-                   [rand_episode].keys()))
-        rand_frame = list(self.allowed_frames["Frames"][rand_season]
-                          [rand_episode].keys())[
-            rand_frame_index]
-        if (self.allowed_frames["Frames"][rand_season][rand_episode]
-                [rand_frame]["reports"] >= self.reports or
-                f"{rand_season}{rand_episode} - {rand_frame}" in
-                self.prev_frames):
-            del self.allowed_frames["Frames"][rand_season][rand_episode]
-            [rand_frame]
-            if (len(self.allowed_frames["Frames"][rand_season]
-                    [rand_episode]) == 0):
-                del self.allowed_frames["Frames"][rand_season][rand_episode]
-            return self.get_random_frame()
-        return rand_season, rand_episode, rand_frame
-
-    def new_frame(self):
-        self.report_button['text'] = "Report Frame"
-        # Removes disallowed frames from pool
-        if len(self.frame_data) == 0:
-            with open(os.path.join(self.dir_path, "frame-data.json"), 'r',
-                      encoding='utf-8') as file:
-                self.frame_data = json.load(file)
-                self.allowed_frames = copy.deepcopy(self.frame_data)
-                for s in list(self.allowed_frames["Frames"].keys()):
-                    if int(s[1:]) not in self.season_select:
-                        del self.allowed_frames["Frames"][s]
-                for s in list(self.allowed_frames["Frames"].keys()):
-                    for e in list(self.allowed_frames["Frames"][s].keys()):
-                        for f in list(self.allowed_frames["Frames"][s][e]
-                                      .keys()):
-                            if (self.allowed_frames["Frames"][s][e]
-                                    [f]['reports'] >= self.reports):
-                                del self.allowed_frames["Frames"][s][e][f]
-                        if (len(self.allowed_frames
-                                ["Frames"][s][e].keys()) == 0):
-                            del self.allowed_frames["Frames"][s][e]
-
-                    if len(self.allowed_frames["Frames"][s].keys()) == 0:
-                        del self.allowed_frames["Frames"][s]
-
-        if not self.answered and self.num_questions != 0:
-            self.answered = True
-            self.image_canvas.config(
-                highlightbackground="red", highlightcolor="red")
-            time = f"{self.current_frame_time//3600:02}:\
-{(self.current_frame_time % 3600)//60:02}:{self.current_frame_time % 60:02}"
-            self.next_button['text'] = "Next"
-            self.score_label[
-                'text'] = f"Score: {self.score} / {self.num_questions} \
-({self.score/self.num_questions*100:.2f}%)"
-            self.image_info_label['text'] = f"{self.current_season}\
-{self.current_episode}: \
-{self.all_ep_data[f"{self.current_season}{self.current_episode}"]["title"]} \
-- {time}"
-            self.search_bar.delete(0, tk.END)
-            for menu in self.menus.keys():
-                self.menus[menu].pack_forget()
-                self.selected_ep.set("")
-        else:
-            self.image_canvas.config(
-                highlightbackground="white", highlightcolor="white")
-            self.next_button['text'] = "Skip"
-            if self.num_questions == 0:
-                self.score_label[
-                    'text'] = f"Score: {self.score} / {self.num_questions} \
-({100.00:.2f}%)"
+        for menu in self.menus:
+            if menu["text"] == "":
+                menu.forget()
             else:
-                self.score_label[
-                    'text'] = f"Score: {self.score} / {self.num_questions} \
-({self.score/self.num_questions*100:.2f}%)"
-            self.num_questions += 1
-            self.answered = False
+                menu.pack(fill="x")
 
-            (self.current_season,
-             self.current_episode,
-             self.current_frame) = self.get_random_frame()
-            self.prev_frames.append(
-                f"{self.current_season}{self.current_episode} \
-- {self.current_frame}")
-            if len(self.all_frames) == 0:
-                for root, _, files in os.walk(self.dir_path):
-                    for name in files:
-                        self.all_frames.append(os.path.join(root, name))
-            for frame in self.all_frames:
-                if f"{self.current_season}{self.current_episode} - \
-{self.current_frame}" in frame:
-                    self.img = Image.open(frame)
-                    exit
-            self.controller.img = self.img
-            self.controller.resize_image()
-            self.current_frame_time = (
-                self.frame_data["Frames"][self.current_season]
-                [self.current_episode][self.current_frame]["time"])
-            self.image_info_label['text'] = "What episode is this frame from?"
+        if self.shared_data["game-dir"] == "":
+            self.img = Image.open(self.shared_data["default-image"])
+        elif self.shared_data["question-num"] == 0:
+            self.img = Image.open(self.shared_data["start-image"])
 
-    def on_search(self, event):
-        query = self.search_bar.get()
-        result = []
-        if len(query) > 3:
-            regex_search = re.search(
-                r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)", query)
-            if regex_search:
-                season_no = regex_search.group(1)
-                episode_no = regex_search.group(2)
-                episode = f"S{int(season_no[1:]):02}E{int(episode_no[1:]):02}"
-                if episode in list(self.all_ep_data.keys()):
-                    result.append([episode, 100])
-
-            # Fuzzy Time??
-            for r in process.extract(query, self.title_map):
-                result.append([r[2], r[1]])
-            if self.syn == 1:
-                for r in process.extract(query, self.synopsis_map, limit=10):
-                    result.append([r[2], r[1]])
-            # Displaying
-            result.sort(key=lambda x: x[1], reverse=True)
-            results = []
-            for x in result:
-                results.append(x[0])
-            results = list(dict.fromkeys(results))
-            self.default_ep = results
-            menus_list = list(self.menus.keys())
-            for i in range(len(menus_list)):
-                self.menus[menus_list[i]].pack(fill='x')
-                if self.syn == 1:
-                    menu_text = f"{results[i]} : \
-{self.all_ep_data[results[i]]['title']}\n\
-{self.all_ep_data[results[i]]['synopsis']}"
-                else:
-                    menu_text = f"{results[i]} : \
-{self.all_ep_data[results[i]]['title']}"
-                self.menus[menus_list[i]].config(
-                    text=menu_text, value=results[i])
-
-        else:
-            for menu in self.menus.keys():
-                self.menus[menu].pack_forget()
-                self.selected_ep.set("")
-
-    def resize_radios(self, event=None):
-        self.scrollabe_frame_width = self.scrollable_frame.winfo_width()
-        for menu in self.menus.keys():
-            self.menus[menu].config(wraplength=self.scrollabe_frame_width-10)
-
-    def on_submit(self, event=None):
-        if self.answered:
-            self.new_frame()
-
-        elif len(self.search_bar.get()) > 3:
-            self.answered = True
-            correct_ep = f"{self.current_season}{self.current_episode}"
-            if (self.default_ep[0] == correct_ep or
-                    self.selected_ep.get() == correct_ep):
-                self.score += 1
-                self.image_canvas.config(
-                    highlightbackground="#00FF00", highlightcolor="#00FF00")
-            else:
-                self.image_canvas.config(
-                    highlightbackground="red", highlightcolor="red")
-
-            time = f"{self.current_frame_time//3600:02}:\
-{(self.current_frame_time % 3600)//60:02}:{self.current_frame_time % 60:02}"
-            self.next_button['text'] = "Next"
-            self.score_label[
-                'text'] = f"Score: {self.score} / {self.num_questions} \
-({self.score/self.num_questions*100:.2f}%)"
-            self.image_info_label['text'] = f"{self.current_season}\
-{self.current_episode}: \
-{self.all_ep_data[f"{self.current_season}{self.current_episode}"]["title"]} \
-- {time}"
-            self.search_bar.delete(0, tk.END)
-            for menu in self.menus.keys():
-                self.menus[menu].pack_forget()
-                self.selected_ep.set("")
+        self.resize_widgets()
 
 
 class settings_screen(tk.Frame):
+    """Class for settings_screen of FrameGame"""
+
     def __init__(self, parent, controller):
-        self.bg = controller.bg
-        self.button_color = controller.button_color
-        self.y = controller.y
-        self.x = controller.x
+        """Initializes the screen"""
+
+        super().__init__(parent, bg=controller.shared_data["bg-color"])
+        self.shared_data = controller.shared_data
         self.controller = controller
-        self.data_dir = controller.game_dir
-        super().__init__(parent, bg=self.bg)
-
-        # Title bar:
-        title_bar = tk.Label(self, text="Frame Game: Settings", bg=self.bg)
-        title_bar.place(relheight=self.y, relwidth=28 *
-                        self.x, relx=3*self.x, rely=self.y*0)
-
-        # Settings Labels:
-        file_label = tk.Label(self, text="Change File",
-                              bg=self.bg, relief="sunken")
-        season_label = tk.Label(
-            self, text="Season Select", bg=self.bg, relief="sunken")
-        synopsis_label = tk.Label(
-            self, text="Synopsis Search", bg=self.bg, relief="sunken")
-        report_label = tk.Label(
-            self, text="Report Threshold", bg=self.bg, relief="sunken")
-        file_label.place(relheight=self.y, relwidth=8 *
-                         self.x, relx=1*self.x, rely=self.y*2)
-        season_label.place(relheight=self.y, relwidth=8 *
-                           self.x, relx=1*self.x, rely=self.y*5)
-        synopsis_label.place(relheight=self.y, relwidth=8 *
-                             self.x, relx=1*self.x, rely=self.y*8)
-        report_label.place(relheight=self.y, relwidth=8 *
-                           self.x, relx=1*self.x, rely=self.y*11)
-
-        # Settings options:
-        self.file_button = tk.Button(self, text="No Current Directory",
-                                     bg=self.button_color, anchor='w',
-                                     command=self.change_file)
-        self.file_button_label = tk.Label(
-            self, text="Click ^ To Choose Directory", bg=self.bg, anchor='w')
-        self.file_button.place(
-            relheight=self.y, relwidth=23*self.x,
-            relx=10*self.x, rely=self.y*2)
-        self.file_button_label.place(
-            relheight=self.y, relwidth=23*self.x,
-            relx=10*self.x, rely=self.y*3)
-
-        self.season_entry = tk.Entry(
-            self, bg=self.button_color, relief='raised')
-        self.season_entry_label = tk.Label(
-            self, bg=self.bg, text="Must be in '1, 2, 5' format", anchor='w')
-        self.season_entry.place(
-            relheight=self.y, relwidth=23*self.x,
-            relx=10*self.x, rely=self.y*5)
-        self.season_entry_label.place(
-            relheight=self.y, relwidth=23*self.x,
-            relx=10*self.x, rely=self.y*6)
-
-        self.syn = tk.IntVar(self, value=1)
-        self.synopsis_radio_yes = tk.Radiobutton(
-            self, text="Yes", bg=self.button_color, variable=self.syn,
-            value=1, indicatoron=False)
-        self.synopsis_radio_no = tk.Radiobutton(
-            self, text="No", bg=self.button_color, variable=self.syn,
-            value=0, indicatoron=False)
-        self.synopsis_radio_yes.place(
-            relheight=self.y, relwidth=3*self.x, relx=10*self.x, rely=self.y*8)
-        self.synopsis_radio_no.place(
-            relheight=self.y, relwidth=3*self.x, relx=13*self.x, rely=self.y*8)
-
-        self.report_entry = tk.Entry(
-            self, bg=self.button_color, relief='raised')
-        self.report_entry.place(
-            relheight=self.y, relwidth=4*self.x,
-            relx=10*self.x, rely=self.y*11)
-
-        self.save_button = tk.Button(
-            self, text="Save Settings", bg=self.button_color,
-            command=self.save_settings)
-        self.save_button.place(
-            relheight=self.y, relwidth=14*self.x,
-            relx=10*self.x, rely=14*self.y)
-
-        self.return_button = tk.Button(
-            self, text="Return to Main Menu", bg=self.button_color,
-            command=lambda: (self.update_game_dir(),
-                             controller.show_page(main_screen)))
-        self.return_button.place(
-            relheight=self.y, relwidth=14*self.x,
-            relx=10*self.x, rely=17*self.y)
-
-        self.default_button = tk.Button(
-            self, text="Default Settings", fg="#AA0000",
-            bg=self.button_color,
-            command=lambda: self.default_settings(self.data_dir))
-        self.default_button.place(
-            relheight=self.y, relwidth=10*self.x,
-            relx=12*self.x, rely=27*self.y)
-
-        self.update_disabled_widgets()
-
-    def update_game_dir(self):
-        self.controller.game_dir = self.data_dir
+        self.get_prev_session()
+        self.draw_widgets()
 
     def on_show(self):
-        self.data_dir = self.controller.game_dir
-        self.file_button["text"] = self.data_dir
-        self.update_disabled_widgets()
-        if os.path.exists(os.path.join(self.data_dir, "game-data.json")):
-            self.import_settings(os.path.join(self.data_dir, "game-data.json"))
-        else:
-            self.default_settings(os.path.join(self.data_dir))
+        """Runs when the page is shown"""
+        self.update_widgets()
 
-    def change_file(self):
-        self.data_dir = fd.askdirectory(
-            title="Choose Game Data Directory", mustexist=True)
-        if not os.path.exists(os.path.join(self.data_dir, "frame-data.json")):
-            self.data_dir = ""
-            self.file_button["text"] = "No Current Directory"
-            self.syn.set(1)
-            self.season_entry.delete(0, tk.END)
-            self.season_entry.insert(0, "")
-            self.report_entry.delete(0, tk.END)
-            self.report_entry.insert(0, "")
-            self.update_disabled_widgets()
-            return
-        self.file_button["text"] = self.data_dir
-        self.update_disabled_widgets()
-        if os.path.exists(os.path.join(self.data_dir, "game-data.json")):
-            self.import_settings(os.path.join(self.data_dir, "game-data.json"))
-        else:
-            self.default_settings(os.path.join(self.data_dir))
-        with open("./defaults.json", 'w', encoding='utf-8') as file:
-            data = {"path": self.data_dir}
-            json.dump(data, file, ensure_ascii=False, indent=4)
+    def draw_widgets(self):
+        """Draws all the widgets used for the main screen"""
 
-    def update_disabled_widgets(self):
-        if self.data_dir == "":
-            self.default_button.config(state=tk.DISABLED)
-            self.save_button.config(state=tk.DISABLED)
-            self.report_entry.config(state=tk.DISABLED)
+        # Title bar
+        title_bar = tk.Label(self, text="Frame Game: Settings",
+                             bg=self.shared_data["bg-color"])
+        title_bar.place(relheight=1*self.shared_data["y-mod"],
+                        relwidth=28*self.shared_data["x-mod"],
+                        relx=3*self.shared_data["x-mod"],
+                        rely=0*self.shared_data["y-mod"])
+
+        # Settings Labels
+        file_label = tk.Label(self, text="Change File",
+                              bg=self.shared_data["bg-color"],
+                              relief="sunken")
+        file_label.place(relheight=1*self.shared_data["y-mod"],
+                         relwidth=8*self.shared_data["x-mod"],
+                         relx=1*self.shared_data["x-mod"],
+                         rely=2*self.shared_data["y-mod"])
+
+        season_label = tk.Label(self, text="Season Select",
+                                bg=self.shared_data["bg-color"],
+                                relief="sunken")
+        season_label.place(relheight=1*self.shared_data["y-mod"],
+                           relwidth=8*self.shared_data["x-mod"],
+                           relx=1*self.shared_data["x-mod"],
+                           rely=5*self.shared_data["y-mod"])
+
+        synopsis_label = tk.Label(self, text="Synopsis Search",
+                                  bg=self.shared_data["bg-color"],
+                                  relief="sunken")
+        synopsis_label.place(relheight=1*self.shared_data["y-mod"],
+                             relwidth=8*self.shared_data["x-mod"],
+                             relx=1*self.shared_data["x-mod"],
+                             rely=8*self.shared_data["y-mod"])
+
+        report_label = tk.Label(self, text="Report Threshold",
+                                bg=self.shared_data["bg-color"],
+                                relief="sunken")
+        report_label.place(relheight=1*self.shared_data["y-mod"],
+                           relwidth=8*self.shared_data["x-mod"],
+                           relx=1*self.shared_data["x-mod"],
+                           rely=11*self.shared_data["y-mod"])
+
+        # File Button
+        self.file_button = tk.Button(self, anchor="w",
+                                     text="",
+                                     bg=self.shared_data["bt-color"],
+                                     command=self.change_file)
+        self.file_button.place(relheight=1*self.shared_data["y-mod"],
+                               relwidth=23*self.shared_data["x-mod"],
+                               relx=10*self.shared_data["x-mod"],
+                               rely=2*self.shared_data["y-mod"])
+
+        self.file_button_label = tk.Label(self,
+                                          text="Click ^ To Choose Directory",
+                                          bg=self.shared_data["bg-color"],
+                                          anchor="w")
+        self.file_button_label.place(relheight=1*self.shared_data["y-mod"],
+                                     relwidth=23*self.shared_data["x-mod"],
+                                     relx=10*self.shared_data["x-mod"],
+                                     rely=3*self.shared_data["y-mod"])
+
+        # Season Entry
+        self.season_entry = tk.Entry(self, relief="raised",
+                                     bg=self.shared_data["bt-color"])
+        self.season_entry.place(relheight=1*self.shared_data["y-mod"],
+                                relwidth=23*self.shared_data["x-mod"],
+                                relx=10*self.shared_data["x-mod"],
+                                rely=5*self.shared_data["y-mod"])
+
+        self.season_entry_label = tk.Label(self, anchor="w",
+                                           bg=self.shared_data["bg-color"],
+                                           text="Must be in \"1 2 5\" format")
+        self.season_entry_label.place(relheight=1*self.shared_data["y-mod"],
+                                      relwidth=23*self.shared_data["x-mod"],
+                                      relx=10*self.shared_data["x-mod"],
+                                      rely=6*self.shared_data["y-mod"])
+
+        # Synopsis Radios
+        self.syn = tk.BooleanVar(self, value=True)
+        self.synopsis_radio_yes = tk.Radiobutton(
+            self, text="Yes", bg=self.shared_data["bt-color"],
+            variable=self.syn, value=True, indicatoron=False)
+        self.synopsis_radio_yes.place(relheight=1*self.shared_data["y-mod"],
+                                      relwidth=3*self.shared_data["x-mod"],
+                                      relx=10*self.shared_data["x-mod"],
+                                      rely=8*self.shared_data["y-mod"])
+
+        self.synopsis_radio_no = tk.Radiobutton(
+            self, text="No", bg=self.shared_data["bt-color"],
+            variable=self.syn, value=False, indicatoron=False)
+        self.synopsis_radio_no.place(relheight=1*self.shared_data["y-mod"],
+                                     relwidth=3*self.shared_data["x-mod"],
+                                     relx=13*self.shared_data["x-mod"],
+                                     rely=8*self.shared_data["y-mod"])
+
+        # Report Entry
+        self.report_entry = tk.Entry(self, relief="raised",
+                                     bg=self.shared_data["bt-color"])
+        self.report_entry.place(relheight=1*self.shared_data["y-mod"],
+                                relwidth=4*self.shared_data["x-mod"],
+                                relx=10*self.shared_data["x-mod"],
+                                rely=11*self.shared_data["y-mod"])
+
+        # Save Button
+        self.save_button = tk.Button(self, text="Save Settings",
+                                     bg=self.shared_data["bt-color"],
+                                     command=self.save_settings)
+        self.save_button.place(relheight=1*self.shared_data["y-mod"],
+                               relwidth=14*self.shared_data["x-mod"],
+                               relx=10*self.shared_data["x-mod"],
+                               rely=14*self.shared_data["y-mod"])
+
+        # Return Button
+        self.return_button = tk.Button(self, text="Return to Main Menu",
+                                       bg=self.shared_data["bt-color"],
+                                       command=self.to_main_screen)
+        self.return_button.place(relheight=1*self.shared_data["y-mod"],
+                                 relwidth=14*self.shared_data["x-mod"],
+                                 relx=10*self.shared_data["x-mod"],
+                                 rely=17*self.shared_data["y-mod"])
+
+        # Default Button
+        self.default_button = tk.Button(self, text="Default Settings",
+                                        fg="#AA0000",
+                                        bg=self.shared_data["bt-color"],
+                                        command=self.default_settings)
+        self.default_button.place(relheight=1*self.shared_data["y-mod"],
+                                  relwidth=10*self.shared_data["x-mod"],
+                                  relx=12*self.shared_data["x-mod"],
+                                  rely=27*self.shared_data["y-mod"])
+
+    def get_prev_session(self):
+        """Loads the most recent game in"""
+
+        # Checks if file exists and reads it.
+        if self.shared_data["game-dir"] == "":
+            if os.path.exists(self.shared_data["defaults-file"]):
+                with open(self.shared_data["defaults-file"], "r") as file:
+                    try:
+                        data = json.load(file)
+                        self.shared_data["game-dir"] = data["path"]
+                    except Exception:
+                        pass
+
+        # Updates things
+        self.update_settings()
+        self.reset_data()
+
+    def reset_data(self):
+        """Resets the Settings Variables to the Data File Settings"""
+
+        # Will reset settings with value in all-data
+        if self.shared_data["game-dir"] != "":
+            self.shared_data["synopsis-search"] = (
+                self.shared_data["all-data"]["settings"]["synopsis"])
+
+            self.shared_data["report-threshold"] = (
+                self.shared_data["all-data"]["settings"]["report"])
+
+            self.shared_data["allowed-seasons"] = (
+                self.shared_data["all-data"]["settings"]["seasons"])
+
+    def update_settings(self):
+        """Updates the settings"""
+
+        if self.shared_data["game-dir"] != "":
+            # Main data file
+            self.shared_data["data-file"] = os.path.join(
+                self.shared_data["game-dir"],
+                self.shared_data["data-file-name"])
+            with open(self.shared_data["data-file"], "r") as file:
+                self.shared_data["all-data"] = json.load(file)
+
+            self.shared_data["synopsis-search"] = (
+                self.shared_data["all-data"]["settings"]["synopsis"])
+
+            self.shared_data["report-threshold"] = (
+                self.shared_data["all-data"]["settings"]["report"])
+
+            self.shared_data["allowed-seasons"] = (
+                self.shared_data["all-data"]["settings"]["seasons"])
+
+            # Title
+            self.shared_data["game-title"] = (
+                self.shared_data["all-data"]["settings"]["title"])
+
+            # Synopsis data
+            self.shared_data["ep-data-file"] = os.path.join(
+                self.shared_data["game-dir"],
+                self.shared_data["ep-data-file-name"])
+            with open(self.shared_data["ep-data-file"], "r") as file:
+                self.shared_data["all-ep-info"] = json.load(file)
+
+            # Ep data slicing
+            regex = r"([Ss]0?[1-9]\d*)([Ee]0?[1-9]\d*)"
+            for key in list(self.shared_data["all-ep-info"].keys()):
+                if int(re.search(regex, key).group(1)[1:]) not in (
+                        self.shared_data["allowed-seasons"]):
+                    del self.shared_data["all-ep-info"][key]
+
+            # Title map
+            self.shared_data["title-map"] = {ep_id: info["title"]
+                                             for ep_id, info
+                                             in self.shared_data
+                                             ["all-ep-info"].items()}
+
+            # Syn map
+            self.shared_data["synopsis-map"] = {ep_id: info["synopsis"]
+                                                for ep_id, info
+                                                in self.shared_data
+                                                ["all-ep-info"].items()}
+
+            # All frame-paths
+            self.shared_data["all-frame-paths"] = []
+            for root, _, files in os.walk(self.shared_data["game-dir"]):
+                for name in files:
+                    (self.shared_data["all-frame-paths"]
+                     .append(os.path.join(root, name)))
+
+            # Frame data copy
+            self.shared_data["allowed-frames"] = (
+                copy.deepcopy(self.shared_data["all-data"]["frames"]))
+
+            # Temp allowed-frames for smaller var len
+            allowed_frames = self.shared_data["allowed-frames"]
+
+            # Removes seasons from allowed frames
+            for s in list(allowed_frames.keys()):
+                if int(s[1:]) not in self.shared_data["allowed-seasons"]:
+                    del allowed_frames[s]
+
+            # Removes frames from allowed frames based on reports
+            rep_t = self.shared_data["report-threshold"]
+            for s in list(allowed_frames.keys()):
+                for e in list(
+                        allowed_frames[s].keys()):
+                    for f in list(allowed_frames[s][e].keys()):
+                        if rep_t == -1:
+                            if (allowed_frames[s][e][f]["reports"] == 0):
+                                del allowed_frames[s][e][f]
+                        else:
+                            if (allowed_frames[s][e][f]["reports"] >= rep_t):
+                                del allowed_frames[s][e][f]
+                    if (len(allowed_frames[s][e].keys()) == 0):
+                        del allowed_frames[s][e]
+                if len(allowed_frames[s].keys()) == 0:
+                    del allowed_frames[s]
+
+    def update_widgets(self):
+        """Updates widget configs"""
+
+        # Enables or disabled widgets
+        if self.shared_data["game-dir"] == "":
             self.season_entry.config(state=tk.DISABLED)
-            self.synopsis_radio_no.config(state=tk.DISABLED)
             self.synopsis_radio_yes.config(state=tk.DISABLED)
+            self.synopsis_radio_no.config(state=tk.DISABLED)
+            self.report_entry.config(state=tk.DISABLED)
+            self.save_button.config(state=tk.DISABLED)
+            self.default_button.config(state=tk.DISABLED)
         else:
-            self.default_button.config(state=tk.NORMAL)
-            self.save_button.config(state=tk.NORMAL)
-            self.report_entry.config(state=tk.NORMAL)
             self.season_entry.config(state=tk.NORMAL)
-            self.synopsis_radio_no.config(state=tk.NORMAL)
             self.synopsis_radio_yes.config(state=tk.NORMAL)
+            self.synopsis_radio_no.config(state=tk.NORMAL)
+            self.report_entry.config(state=tk.NORMAL)
+            self.save_button.config(state=tk.NORMAL)
+            self.default_button.config(state=tk.NORMAL)
 
-    def import_settings(self, path):
-        try:
-            with open(path, "r", encoding='utf-8') as file:
-                data = json.load(file)
-                self.season_entry.delete(0, tk.END)
-                self.season_entry.insert(0, data["Settings"]["Seasons"])
-                self.report_entry.delete(0, tk.END)
-                self.report_entry.insert(0, data["Settings"]["Report"])
-                self.syn.set(data["Settings"]["Synopsis"])
-        except Exception:
-            self.default_settings(path)
+        # Updates the widgets to reflect settings
+        self.file_button["text"] = self.shared_data["game-dir"]
+        self.season_entry.delete(0, tk.END)
+        self.season_entry.insert(0, self.shared_data["allowed-seasons"])
+        self.report_entry.delete(0, tk.END)
+        self.report_entry.insert(0, self.shared_data["report-threshold"])
+        self.syn.set(self.shared_data["synopsis-search"])
 
-    def default_settings(self, path):
-        data_file_path = os.path.join(path, 'frame-data.json')
-        game_data_file_path = os.path.join(path, 'game-data.json')
+    def default_settings(self):
+        """Generates default settings from data file"""
 
-        try:
-            with open(data_file_path, "r", encoding='utf-8') as file:
-                data = json.load(file)
-            seasons = ""
-            for s in data["Frames"].keys():
-                seasons += str(int(s[1:])) + ', '
-            seasons = seasons[:-2]
+        # Game title
+        self.shared_data["game-title"] = (
+            self.shared_data["all-data"]["settings"]["title"])
 
-            self.season_entry.delete(0, tk.END)
-            self.season_entry.insert(0, seasons)
-            self.report_entry.delete(0, tk.END)
-            self.report_entry.insert(0, 1)
-            self.syn.set(1)
+        # Allowed seasons
+        self.shared_data["allowed-seasons"].clear()
+        for s in self.shared_data["all-data"]["frames"].keys():
+            self.shared_data["allowed-seasons"].append(int(s[1:]))
 
-            with open(game_data_file_path, "w", encoding='utf-8') as file:
-                game_data = {
-                    "Settings": {"Seasons": seasons,
-                                 "Synopsis": 1, "Report": 1, }
-                }
-                json.dump(game_data, file, ensure_ascii=False, indent=4)
-        except Exception:
-            pass
+        # Synopsis and Report settings
+        self.shared_data["synopsis-search"] = True
+        self.shared_data["report-threshold"] = 1
+
+        self.update_widgets()
+
+    def to_main_screen(self):
+        """Switches screen to main screen"""
+        self.reset_data()
+        self.update_settings()
+        self.controller.show_page(main_screen)
 
     def save_settings(self):
-        new_seasons = self.season_entry.get().split(',')
-        remove_list = []
-        for i in range(len(new_seasons)):
+        """Saves new settings to file"""
+
+        if self.shared_data["game-dir"] == "":
+            return
+        # Allowed season get
+        results = []
+        for s in self.season_entry.get().split(" "):
             try:
-                new_seasons[i] = int(new_seasons[i])
+                results.append(int(s))
             except Exception:
-                remove_list.append(i)
-        for i in remove_list[::-1]:
-            del new_seasons[i]
+                pass
+        list(set(results)).sort()
+        self.shared_data["allowed-seasons"].clear()
+        for s in list(self.shared_data["all-data"]["frames"].keys()):
+            if int(s[1:]) in results:
+                self.shared_data["allowed-seasons"].append(int(s[1:]))
+        if len(self.shared_data["allowed-seasons"]) == 0:
+            self.shared_data["allowed-seasons"].clear()
+            for s in self.shared_data["all-data"]["frames"].keys():
+                self.shared_data["allowed-seasons"].append(int(s[1:]))
 
-        data_file_path = os.path.join(self.data_dir, 'frame-data.json')
-        game_data_file_path = os.path.join(self.data_dir, 'game-data.json')
+        # Synopsis get
+        self.shared_data["synopsis-search"] = self.syn.get()
 
-        with open(data_file_path, "r", encoding='utf-8') as file:
-            data = json.load(file)
-        all_seasons = []
-        for s in data["Frames"].keys():
-            all_seasons.append((int(s[1:])))
-
-        seasons = list(set(new_seasons).intersection(all_seasons))
-        if len(seasons) == 0:
-            seasons = all_seasons
-        s_entry = ""
-        for s in seasons:
-            s_entry += str(s) + ', '
-        self.season_entry.delete(0, tk.END)
-        self.season_entry.insert(0, s_entry[:-2])
-
+        # Report get
         try:
-            reports = int(self.report_entry.get())
+            if int(self.report_entry.get()) >= -1:
+                self.shared_data["report-threshold"] = (
+                    int(self.report_entry.get()))
         except Exception:
-            reports = 1
+            self.shared_data["report-threshold"] = 1
 
-        self.report_entry.delete(0, tk.END)
-        self.report_entry.insert(0, reports)
+        # Applies settings to game variables
+        self.shared_data["all-data"]["settings"].update({
+            "seasons": self.shared_data["allowed-seasons"],
+            "synopsis": self.shared_data["synopsis-search"],
+            "report": self.shared_data["report-threshold"]})
 
-        with open(game_data_file_path, "w", encoding='utf-8') as file:
-            game_data = {
-                "Settings": {"Seasons": s_entry[:-2],
-                             "Synopsis": self.syn.get(), "Report": reports}
-            }
-            json.dump(game_data, file, ensure_ascii=False, indent=4)
+        # Writes the data
+        with open(self.shared_data["data-file"], "w") as file:
+            json.dump(self.shared_data["all-data"], file,
+                      ensure_ascii=False, indent=4)
+
+        # Updates default loadout file
+        with open(self.shared_data["defaults-file"],
+                  "w", encoding="utf-8") as file:
+            data = {"path": self.shared_data["game-dir"]}
+            json.dump(data, file, ensure_ascii=False, indent=4)
+
+        # Gets all the data files prepared and updates widgets
+        self.update_settings()
+        self.update_widgets()
+
+    def change_file(self):
+        """Updates the current game file"""
+
+        # Gets new directory
+        self.shared_data["game-dir"] = fd.askdirectory(
+            title="Choose Game Data Directory", mustexist=True)
+        self.shared_data["data-file"] = os.path.join(
+            self.shared_data["game-dir"],
+            self.shared_data["data-file-name"])
+
+        # Ensures dir has data file and correct values
+        if (os.path.exists(self.shared_data["data-file"]) and
+                self.shared_data["game-dir"] != ""):
+            with open(self.shared_data["data-file"], "r") as file:
+                self.shared_data["all-data"] = json.load(file)
+            self.shared_data["all-data"]["settings"].update({
+                "seasons": [], "synopsis": True, "report": 1})
+            self.default_settings()
+        else:
+            self.shared_data["game-dir"] = ""
+
+        # Runs updates
+        self.save_settings()
+        self.update_widgets()
+
+
+class leaderboard_screen(tk.Frame):
+    """Class for settings_screen of FrameGame"""
+
+    def __init__(self, parent, controller):
+        """Initializes the screen"""
+
+        super().__init__(parent, bg=controller.shared_data["bg-color"])
+        self.shared_data = controller.shared_data
+        self.controller = controller
+        self.draw_widgets()
+
+    def on_show(self):
+        """Runs when the page is shown"""
+        pass
+
+    def draw_widgets(self):
+        """Draws all the widgets used for the main screen"""
+        pass
 
 
 def main():
+    """Runs the FrameGame Game Code"""
 
     window = FrameGame()
-
-    # get the main page instance
-    main_page = window.pages[main_screen]
-
-    # connect resize binding to the main page's canvas
-    main_page.search_bar.bind("<KeyRelease>", main_page.on_search)
-    main_page.search_bar.bind("<Return>", main_page.on_submit)
-    for key in list(main_page.menus.keys()):
-        main_page.menus[key].bind("<Return>", main_page.on_submit)
-    # window.image_canvas.bind("<Configure>", window.resize_image)
-    main_page.controller.image_canvas.bind(
-        "<Configure>", main_page.resize_radios)
     window.mainloop()
 
 
