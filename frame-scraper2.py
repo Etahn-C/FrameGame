@@ -1,11 +1,11 @@
 from random import randrange
 import ffmpeg
 import os
-from shutil import copytree
+# from shutil import copytree
 import json
 import re
 from dotenv import load_dotenv
-from apicaller import get_all_synopses
+# from apicaller import get_all_synopses
 import argparse
 from fractions import Fraction
 
@@ -164,7 +164,7 @@ def dir_path(string):
 
 
 def main():
-    
+
     # Arugment processing
     parser = argparse.ArgumentParser(description=(
         "frame-scaper, uses video files and grabs frames from it."))
@@ -205,7 +205,10 @@ def main():
     # Checking for API key
     load_dotenv()
     API_KEY = os.getenv("OMDB_API_KEY")
-    print(API_KEY)
+    if API_KEY is None:
+        print("No Api Key found, make and .env file with OMDB_API_KEY=\"\" "
+              "or add OMDB_API_KEY to your enviroment variables")
+        return
 
 
 if __name__ == "__main__":
