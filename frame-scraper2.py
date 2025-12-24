@@ -1,11 +1,11 @@
 from random import randrange
 import ffmpeg
 import os
-# from shutil import copytree
+from shutil import copytree
 import json
 import re
 from dotenv import load_dotenv
-# from apicaller import get_all_synopses
+from apicaller import get_all_synopses
 import argparse
 from fractions import Fraction
 
@@ -70,7 +70,7 @@ def extract_frames(file: str, output_loc: str, times: list[int]):
 
     file_name = os.path.splitext(os.path.basename(file))[0]
     print(f"\nProcessing: {file_name}")
-
+    
     # Runs the FFMPEG command
     (
         ffmpeg
@@ -119,7 +119,7 @@ def run_files(file_path: str, save_path: str, frame_timing: bool = False,
             times = frame_times(frame_timing, length, fps)
             try:
                 # Extracts frames and then writes data to data file.
-                extract_frames(file, os.path.join(save_path, "frames"), times)
+                extract_frames(file, save_path, times)
                 write_data(data_file_path, item, times)
             except Exception:
                 print("Failed, moving to next file.")
@@ -185,7 +185,10 @@ def main():
                         default=1/60,
                         type=Fraction)
     parser.add_argument("-rt", "--random-timing",
-                        help="Random Timing, defaults to True",
+                        help="Random Timing, defaults to False",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-ov", "--overwrite",
+                        help="Overwrite current data, defaults to False",
                         action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
 
@@ -199,8 +202,14 @@ def main():
     else:
         random_timing = False
 
+    if args.overwrite:
+        overwrite = args.overwrite
+    else:
+        overwrite = False
+
     print(f"{input_dir=}\n{output_dir=}\n"
-          f"{title=}\nframerate={framerate}\n{random_timing=}")
+          f"{title=}\nframerate={framerate}\n{random_timing=}"
+          f"{overwrite=}")
 
     # Checking for API key
     load_dotenv()
@@ -209,6 +218,37 @@ def main():
         print("No Api Key found, make and .env file with OMDB_API_KEY=\"\" "
               "or add OMDB_API_KEY to your enviroment variables")
         return
+
+    # Will create the data file if not already made.
+    if (not os.path.isfile(
+            os.path.join(output_dir, "data.json"))) or (overwrite):
+        print("\nCreating Data File")
+        with open(os.path.join(output_dir, "data.json"), "w",
+                  encoding='utf-8') as file:
+            data = {"settings": {"random_timing": random_timing,
+                                 "framerate": f"{framerate}",
+                                 "title": title}, "frames": {}}
+            json.dump(data, file, ensure_ascii=False, indent=4)
+        print("Data File Created")
+        file.close()
+
+    # Will create the ep data file and use api if not already present
+    if (not os.path.isfile(
+            os.path.join(output_dir, "ep-data.json"))) or (overwrite):
+            print("\nFetching Episode Data")
+            with open(os.path.join(output_dir, "ep-data.json"),
+                      "w", encoding='utf-8') as file:
+                json.dump(get_all_synopses(title, API_KEY),
+                          file, ensure_ascii=False, indent=4)
+            print("Episode Data Fetched - Recommended to check for missing data")
+
+    # Will copy the file structure from the input dir to the output dir
+    copytree(input_dir, os.path.join(output_dir, "frames"),
+             dirs_exist_ok=True, ignore=ignore_files)
+    
+    # Double checks if you want to extract the frames
+    run_files(input_dir, os.path.join(output_dir, "frames"), random_timing, framerate,
+                os.path.join(output_dir, "data.json"))
 
 
 if __name__ == "__main__":
