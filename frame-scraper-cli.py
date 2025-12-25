@@ -70,7 +70,7 @@ def extract_frames(file: str, output_loc: str, times: list[int]):
 
     file_name = os.path.splitext(os.path.basename(file))[0]
     print(f"\nProcessing: {file_name}")
-    
+
     # Runs the FFMPEG command
     (
         ffmpeg
@@ -235,20 +235,20 @@ def main():
     # Will create the ep data file and use api if not already present
     if (not os.path.isfile(
             os.path.join(output_dir, "ep-data.json"))) or (overwrite):
-            print("\nFetching Episode Data")
-            with open(os.path.join(output_dir, "ep-data.json"),
-                      "w", encoding='utf-8') as file:
-                json.dump(get_all_synopses(title, API_KEY),
-                          file, ensure_ascii=False, indent=4)
-            print("Episode Data Fetched - Recommended to check for missing data")
+        print("\nFetching Episode Data")
+        with open(os.path.join(output_dir, "ep-data.json"),
+                  "w", encoding='utf-8') as file:
+            json.dump(get_all_synopses(title, API_KEY),
+                      file, ensure_ascii=False, indent=4)
+        print("Episode Data Fetched - Recommended to check for missing data")
 
     # Will copy the file structure from the input dir to the output dir
     copytree(input_dir, os.path.join(output_dir, "frames"),
              dirs_exist_ok=True, ignore=ignore_files)
-    
+
     # Double checks if you want to extract the frames
-    run_files(input_dir, os.path.join(output_dir, "frames"), random_timing, framerate,
-                os.path.join(output_dir, "data.json"))
+    run_files(input_dir, os.path.join(output_dir, "frames"), random_timing,
+              framerate, os.path.join(output_dir, "data.json"))
 
 
 if __name__ == "__main__":
